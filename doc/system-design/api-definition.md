@@ -205,7 +205,6 @@ Content-Type: application/problem+json
 
 ```json
 {
-  "type": "about:blank",
   "title": "Conflict",
   "status": 409,
   "detail": "指定された日付・座席は予約済みです。",
@@ -215,19 +214,19 @@ Content-Type: application/problem+json
 
 | フィールド | 型 | 内容 |
 | --- | --- | --- |
-| type | string（URI参照） | Phase 1では`about:blank`を使用する |
+| type | string（URI参照） | 省略可能。省略時は`about:blank`として扱う。Phase 1で明示する場合も`about:blank`とする |
 | title | string | HTTPステータスに対応する概要 |
 | status | integer | 実際のHTTPステータスコードと一致させる |
 | detail | string | エラー内容の説明。従来の`message`に代えて使用する |
 | instance | string（URI参照） | エラーが発生したリクエストのパス |
 
-本APIでは上記フィールドをすべて返す。
+本APIでは`title`、`status`、`detail`、`instance`を必ず返す。Phase 1では`type`の省略を許容し、上記のレスポンス例でも省略している。クライアントは`type`が省略されている場合、RFC 9457に従って`about:blank`として扱う。
 
 | HTTPステータス | title | detailの例 |
 | --- | --- | --- |
 | 400 Bad Request | Bad Request | リクエストの内容が不正です。 |
-| 403 Forbidden | Forbidden | この予約はキャンセルできません。 |
-| 404 Not Found | Not Found | 予約が見つかりません。 |
+| 403 Forbidden | Forbidden | 指定された予約はキャンセルできません。 |
+| 404 Not Found | Not Found | 指定された予約が見つかりません。 |
 | 409 Conflict | Conflict | 指定された日付・座席は予約済みです。 |
 | 500 Internal Server Error | Internal Server Error | システムエラーが発生しました。 |
 
