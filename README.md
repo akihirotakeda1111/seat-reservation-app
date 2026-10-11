@@ -46,12 +46,12 @@ Browser（React / Vite） → Spring Boot API（Java 25） → PostgreSQL
 
 ## 開発ロードマップ
 
-| Phase | 内容 |
-|---|---|
-| 1. MVP | ローカル環境で座席照会・予約・キャンセルを実装 |
-| 2. Concurrency | 同時予約制御、Transaction設計、並列Integration Test |
-| 3. Authentication | Cognito / JWT / Spring Securityによる認証認可 |
-| 4. AWS | TerraformによるAWS環境構築とCI/CD |
+| Phase             | 内容                                                |
+| ----------------- | --------------------------------------------------- |
+| 1. MVP            | ローカル環境で座席照会・予約・キャンセルを実装      |
+| 2. Concurrency    | 同時予約制御、Transaction設計、並列Integration Test |
+| 3. Authentication | Cognito / JWT / Spring Securityによる認証認可       |
+| 4. AWS            | TerraformによるAWS環境構築とCI/CD                   |
 
 ## 開発方針
 

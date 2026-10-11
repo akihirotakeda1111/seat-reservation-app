@@ -4,10 +4,10 @@
 
 Phase 1では、座席照会・座席予約・予約キャンセルの3つのREST APIを提供する。[データモデル定義](data-model.md)の`seats`と`reservations`を使用する。
 
-| Method | Endpoint | 内容 |
-| --- | --- | --- |
-| GET | `/api/seats?date={date}` | 座席の状態取得 |
-| POST | `/api/reservations` | 座席予約 |
+| Method | Endpoint                 | 内容           |
+| ------ | ------------------------ | -------------- |
+| GET    | `/api/seats?date={date}` | 座席の状態取得 |
+| POST   | `/api/reservations`      | 座席予約       |
 | DELETE | `/api/reservations/{id}` | 予約キャンセル |
 
 ## 2. 共通仕様
@@ -28,9 +28,9 @@ GET /api/seats?date=2026-10-10
 X-Demo-User: demo-user-1
 ```
 
-| パラメータ | 場所 | 型 | 必須 | 内容 |
-| --- | --- | --- | --- | --- |
-| date | クエリ | string（date） | 必須 | 照会対象日。実在する日付を指定する |
+| パラメータ | 場所   | 型             | 必須 | 内容                               |
+| ---------- | ------ | -------------- | ---- | ---------------------------------- |
+| date       | クエリ | string（date） | 必須 | 照会対象日。実在する日付を指定する |
 
 リクエスト本文は送信しない。
 
@@ -67,19 +67,19 @@ Cache-Control: no-store
 }
 ```
 
-| フィールド | 型 | 内容 |
-| --- | --- | --- |
-| date | string（date） | 照会対象日 |
-| seats | array | 座席番号の昇順で並べた全座席の状態 |
-| seats[].seatNumber | integer | 座席番号 |
-| seats[].status | string | `AVAILABLE`、`MINE`、`OCCUPIED`のいずれか |
-| seats[].reservationId | string（UUID） | `MINE`の場合のみ返すキャンセル用の予約ID |
+| フィールド            | 型             | 内容                                      |
+| --------------------- | -------------- | ----------------------------------------- |
+| date                  | string（date） | 照会対象日                                |
+| seats                 | array          | 座席番号の昇順で並べた全座席の状態        |
+| seats[].seatNumber    | integer        | 座席番号                                  |
+| seats[].status        | string         | `AVAILABLE`、`MINE`、`OCCUPIED`のいずれか |
+| seats[].reservationId | string（UUID） | `MINE`の場合のみ返すキャンセル用の予約ID  |
 
-| status | 判定条件 |
-| --- | --- |
-| AVAILABLE | 指定日・指定座席の予約が存在しない |
-| MINE | 指定日・指定座席の予約が操作ユーザーのものである |
-| OCCUPIED | 指定日・指定座席の予約が他ユーザーのものである |
+| status    | 判定条件                                         |
+| --------- | ------------------------------------------------ |
+| AVAILABLE | 指定日・指定座席の予約が存在しない               |
+| MINE      | 指定日・指定座席の予約が操作ユーザーのものである |
+| OCCUPIED  | 指定日・指定座席の予約が他ユーザーのものである   |
 
 - `seats`を基準に指定日の予約を突き合わせ、予約がない座席も返す。
 - `AVAILABLE`と`OCCUPIED`では`reservationId`フィールドを省略する。他ユーザーの予約IDやユーザー情報は公開しない。
@@ -87,11 +87,11 @@ Cache-Control: no-store
 
 ### ステータスコード
 
-| HTTPステータス | 条件 |
-| --- | --- |
-| 200 OK | 照会成功 |
-| 400 Bad Request | 日付の未指定・形式不正・存在しない日付、または共通仕様の入力エラー |
-| 500 Internal Server Error | システムエラー |
+| HTTPステータス            | 条件                                                               |
+| ------------------------- | ------------------------------------------------------------------ |
+| 200 OK                    | 照会成功                                                           |
+| 400 Bad Request           | 日付の未指定・形式不正・存在しない日付、または共通仕様の入力エラー |
+| 500 Internal Server Error | システムエラー                                                     |
 
 ## 4. 座席予約
 
@@ -110,10 +110,10 @@ X-Demo-User: demo-user-1
 }
 ```
 
-| フィールド | 型 | 必須 | 入力条件 |
-| --- | --- | --- | --- |
-| date | string（date） | 必須 | 実在する日付かつ日本時間で当日以降 |
-| seatNumber | integer | 必須 | 座席マスタに存在する座席番号 |
+| フィールド | 型             | 必須 | 入力条件                           |
+| ---------- | -------------- | ---- | ---------------------------------- |
+| date       | string（date） | 必須 | 実在する日付かつ日本時間で当日以降 |
+| seatNumber | integer        | 必須 | 座席マスタに存在する座席番号       |
 
 ### 処理ルール
 
@@ -140,20 +140,20 @@ X-Demo-User: demo-user-1
 }
 ```
 
-| フィールド | 型 | 内容 |
-| --- | --- | --- |
-| id | string（UUID） | 作成した予約のID。キャンセルAPIの`{id}`に指定する |
-| date | string（date） | 予約対象日 |
-| seatNumber | integer | 予約した座席番号 |
+| フィールド | 型             | 内容                                              |
+| ---------- | -------------- | ------------------------------------------------- |
+| id         | string（UUID） | 作成した予約のID。キャンセルAPIの`{id}`に指定する |
+| date       | string（date） | 予約対象日                                        |
+| seatNumber | integer        | 予約した座席番号                                  |
 
 ### ステータスコード
 
-| HTTPステータス | 条件 |
-| --- | --- |
-| 201 Created | 予約成功 |
-| 400 Bad Request | 必須項目の未指定・null、JSONや型の不正、不正な日付・過去日、マスタに存在しない座席番号、または共通仕様の入力エラー |
-| 409 Conflict | 同一日付・同一座席が予約済み |
-| 500 Internal Server Error | システムエラー |
+| HTTPステータス            | 条件                                                                                                               |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| 201 Created               | 予約成功                                                                                                           |
+| 400 Bad Request           | 必須項目の未指定・null、JSONや型の不正、不正な日付・過去日、マスタに存在しない座席番号、または共通仕様の入力エラー |
+| 409 Conflict              | 同一日付・同一座席が予約済み                                                                                       |
+| 500 Internal Server Error | システムエラー                                                                                                     |
 
 ## 5. 予約キャンセル
 
@@ -164,9 +164,9 @@ DELETE /api/reservations/550e8400-e29b-41d4-a716-446655440000
 X-Demo-User: demo-user-1
 ```
 
-| パラメータ | 場所 | 型 | 必須 | 内容 |
-| --- | --- | --- | --- | --- |
-| id | パス | string（UUID） | 必須 | キャンセル対象の予約ID |
+| パラメータ | 場所 | 型             | 必須 | 内容                   |
+| ---------- | ---- | -------------- | ---- | ---------------------- |
+| id         | パス | string（UUID） | 必須 | キャンセル対象の予約ID |
 
 リクエスト本文は送信しない。
 
@@ -184,13 +184,13 @@ X-Demo-User: demo-user-1
 
 ### ステータスコード
 
-| HTTPステータス | 条件 |
-| --- | --- |
-| 204 No Content | キャンセル成功 |
-| 400 Bad Request | 予約IDのUUID形式不正、または共通仕様の入力エラー |
-| 403 Forbidden | 他ユーザーの予約 |
-| 404 Not Found | 予約IDが存在しない |
-| 500 Internal Server Error | システムエラー |
+| HTTPステータス            | 条件                                             |
+| ------------------------- | ------------------------------------------------ |
+| 204 No Content            | キャンセル成功                                   |
+| 400 Bad Request           | 予約IDのUUID形式不正、または共通仕様の入力エラー |
+| 403 Forbidden             | 他ユーザーの予約                                 |
+| 404 Not Found             | 予約IDが存在しない                               |
+| 500 Internal Server Error | システムエラー                                   |
 
 Phase 3で認可モデルを確定する際、存在を秘匿するために他ユーザーの予約を`404 Not Found`として扱う選択肢も比較する。
 
@@ -212,22 +212,22 @@ Content-Type: application/problem+json
 }
 ```
 
-| フィールド | 型 | 内容 |
-| --- | --- | --- |
-| type | string（URI参照） | 省略可能。省略時は`about:blank`として扱う。Phase 1で明示する場合も`about:blank`とする |
-| title | string | HTTPステータスに対応する概要 |
-| status | integer | 実際のHTTPステータスコードと一致させる |
-| detail | string | エラー内容の説明。従来の`message`に代えて使用する |
-| instance | string（URI参照） | エラーが発生したリクエストのパス |
+| フィールド | 型                | 内容                                                                                  |
+| ---------- | ----------------- | ------------------------------------------------------------------------------------- |
+| type       | string（URI参照） | 省略可能。省略時は`about:blank`として扱う。Phase 1で明示する場合も`about:blank`とする |
+| title      | string            | HTTPステータスに対応する概要                                                          |
+| status     | integer           | 実際のHTTPステータスコードと一致させる                                                |
+| detail     | string            | エラー内容の説明。従来の`message`に代えて使用する                                     |
+| instance   | string（URI参照） | エラーが発生したリクエストのパス                                                      |
 
 本APIでは`title`、`status`、`detail`、`instance`を必ず返す。Phase 1では`type`の省略を許容し、上記のレスポンス例でも省略している。クライアントは`type`が省略されている場合、RFC 9457に従って`about:blank`として扱う。
 
-| HTTPステータス | title | detailの例 |
-| --- | --- | --- |
-| 400 Bad Request | Bad Request | リクエストの内容が不正です。 |
-| 403 Forbidden | Forbidden | 指定された予約はキャンセルできません。 |
-| 404 Not Found | Not Found | 指定された予約が見つかりません。 |
-| 409 Conflict | Conflict | 指定された日付・座席は予約済みです。 |
-| 500 Internal Server Error | Internal Server Error | システムエラーが発生しました。 |
+| HTTPステータス            | title                 | detailの例                             |
+| ------------------------- | --------------------- | -------------------------------------- |
+| 400 Bad Request           | Bad Request           | リクエストの内容が不正です。           |
+| 403 Forbidden             | Forbidden             | 指定された予約はキャンセルできません。 |
+| 404 Not Found             | Not Found             | 指定された予約が見つかりません。       |
+| 409 Conflict              | Conflict              | 指定された日付・座席は予約済みです。   |
+| 500 Internal Server Error | Internal Server Error | システムエラーが発生しました。         |
 
 エラー本文に他ユーザーのユーザー情報や、リクエストで指定されたもの以外の予約IDを含めない。`instance`にはクエリ文字列を含めない。システムエラーの内部情報やSQL、制約名、スタックトレースはレスポンスに含めない。

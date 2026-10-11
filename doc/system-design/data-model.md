@@ -4,7 +4,6 @@
 
 Phase 1のデータモデルは、`seats`（座席マスタ）と`reservations`（予約）の2テーブルで構成する。データベースはPostgreSQLを使用する。
 
-
 ## 2. テーブル間の関連
 
 ```mermaid
@@ -28,9 +27,9 @@ erDiagram
 
 全日付で共通の座席番号のみを管理する。マスタに存在する座席を予約可能な座席と定義する。
 
-| カラム名 | データ型 | NULL許可 | デフォルト | 制約 | 説明 |
-| --- | --- | --- | --- | --- | --- |
-| seat_number | SMALLINT | 不可 | なし | PRIMARY KEY、CHECK (seat_number > 0) | 座席番号 |
+| カラム名    | データ型 | NULL許可 | デフォルト | 制約                                 | 説明     |
+| ----------- | -------- | -------- | ---------- | ------------------------------------ | -------- |
+| seat_number | SMALLINT | 不可     | なし       | PRIMARY KEY、CHECK (seat_number > 0) | 座席番号 |
 
 ### 初期データ
 
@@ -41,21 +40,21 @@ erDiagram
 
 予約時にレコードを作成し、キャンセル時に物理削除する。日付別の予約レコードの事前生成は行わない。
 
-| カラム名 | データ型 | NULL許可 | デフォルト | 制約 | 説明 |
-| --- | --- | --- | --- | --- | --- |
-| id | UUID | 不可 | なし | PRIMARY KEY | 予約ID。アプリケーションで生成する |
-| reservation_date | DATE | 不可 | なし | 複合UNIQUEの構成カラム | 予約対象日。日単位で管理する |
-| seat_number | SMALLINT | 不可 | なし | FOREIGN KEY、複合UNIQUEの構成カラム | 予約対象の座席番号 |
-| user_id | VARCHAR(128) | 不可 | なし | — | 予約したユーザーの識別子 |
-| created_at | TIMESTAMPTZ | 不可 | CURRENT_TIMESTAMP | — | 予約レコードの作成日時 |
+| カラム名         | データ型     | NULL許可 | デフォルト        | 制約                                | 説明                               |
+| ---------------- | ------------ | -------- | ----------------- | ----------------------------------- | ---------------------------------- |
+| id               | UUID         | 不可     | なし              | PRIMARY KEY                         | 予約ID。アプリケーションで生成する |
+| reservation_date | DATE         | 不可     | なし              | 複合UNIQUEの構成カラム              | 予約対象日。日単位で管理する       |
+| seat_number      | SMALLINT     | 不可     | なし              | FOREIGN KEY、複合UNIQUEの構成カラム | 予約対象の座席番号                 |
+| user_id          | VARCHAR(128) | 不可     | なし              | —                                   | 予約したユーザーの識別子           |
+| created_at       | TIMESTAMPTZ  | 不可     | CURRENT_TIMESTAMP | —                                   | 予約レコードの作成日時             |
 
 ### 制約
 
-| 制約名 | 対象 | 内容 |
-| --- | --- | --- |
-| pk_reservations | id | 予約を一意に識別する |
-| fk_reservations_seat | seat_number | seats(seat_number)を参照する。参照中の座席の削除・座席番号変更は禁止する |
-| uq_reservations_date_seat | reservation_date, seat_number | 同一日付・同一座席の二重予約を禁止する |
+| 制約名                    | 対象                          | 内容                                                                     |
+| ------------------------- | ----------------------------- | ------------------------------------------------------------------------ |
+| pk_reservations           | id                            | 予約を一意に識別する                                                     |
+| fk_reservations_seat      | seat_number                   | seats(seat_number)を参照する。参照中の座席の削除・座席番号変更は禁止する |
+| uq_reservations_date_seat | reservation_date, seat_number | 同一日付・同一座席の二重予約を禁止する                                   |
 
 ### 業務ルール
 
