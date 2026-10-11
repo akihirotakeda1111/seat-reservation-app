@@ -97,6 +97,9 @@ public class ReservationController {
         if (!reservation.getUserId().equals(userId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "指定された予約はキャンセルできません。");
         }
+        if (Validation.isInvalidDate(reservation.getReservationDate(), clock)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "過去の予約はキャンセルできません。");
+        }
 
         reservationService.cancelReservation(reservation.getId());
 

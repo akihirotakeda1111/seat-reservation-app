@@ -324,6 +324,30 @@ class ReservationApiIntegrationTest {
                 HttpResponse.BodyHandlers.ofString());
     }
 
+    @Test
+    @DisplayName("DEL-07: 過去日の予約はキャンセルできない")
+    void cannotDeletePastReservation() throws Exception {
+        UUID target = save(D.minusDays(1), 1, A);
+        List<Map<String, Object>> before = snapshot();
+
+        HttpResponse<String> response = delete(target.toString(), A);
+
+        JsonNode root = json(response, 400, MediaType.APPLICATION_PROBLEM_JSON);
+        assertThat(root.path("status").asInt()).isEqualTo(400);
+        assertThat(root.path("title").asString()).isEqualTo("Bad Request");
+        assertThat(root.path("detail").asString()).isEqualTo("過去の予約はキャンセルできません。");
+        assertThat(root.path("instance").asString()).isEqualTo(RESERVATIONS + "/" + target);
+        assertThat(snapshot()).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName("DEL-08: 他人の過去日の予約には400ではなく403を返す")
+    void cannotDeleteOthersPastReservation() throws Exception {
+        UUID target = save(D.minusDays(1), 1, B);
+
+        assertRejectedDelete(target.toString(), A, 403);
+    }
+
     private HttpResponse<String> getSeats(String date, String user) throws Exception {
         HttpResponse<String> response = request("GET", "/api/seats?date=" + date, user, null);
         assertThat(response.headers().firstValue("Cache-Control")).contains("no-store");

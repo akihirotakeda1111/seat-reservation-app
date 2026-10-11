@@ -400,20 +400,24 @@ class ReservationControllerTest {
                 return new DataIntegrityViolationException("予約の登録に失敗しました", cause);
         }
 
-        @Test
-        void deleteReservation_正常な場合() throws Exception {
+        @ParameterizedTest(name = "基準日から{0}日後の予約はキャンセル可能")
+        @ValueSource(ints = {0, 1})
+        void deleteReservation_正常な場合(int offsetDays) throws Exception {
                 UUID id = UUID.randomUUID();
-                String apiPath = "/api/reservations/{id}";
+                String apiPath = "/api/reservations/" + id;
                 String userId = "demo-user-1";
+                LocalDate date = LocalDate.now(FIXED_CLOCK).plusDays(offsetDays);
 
-                Reservation saved = mock(Reservation.class);
-                when(saved.getId()).thenReturn(id);
-                when(saved.getUserId()).thenReturn(userId);
-                when(service.getReservationById(id)).thenReturn(saved);
+                Reservation reservation = mock(Reservation.class);
+                when(reservation.getId()).thenReturn(id);
+                when(reservation.getUserId()).thenReturn(userId);
+                when(reservation.getReservationDate()).thenReturn(date);
+                when(service.getReservationById(id)).thenReturn(reservation);
 
-                mockMvc.perform(delete(apiPath, id).header("X-Demo-User", userId))
+                mockMvc.perform(delete(apiPath).header("X-Demo-User", userId))
                                 .andExpect(status().isNoContent()).andExpect(content().string(""));
 
+                verify(service).getReservationById(id);
                 verify(service).cancelReservation(id);
         }
 
@@ -449,6 +453,32 @@ class ReservationControllerTest {
                                 Arguments.of("ユーザーヘッダー未指定", validId, null),
                                 Arguments.of("ユーザーヘッダーが空", validId, ""),
                                 Arguments.of("ユーザーヘッダー不正", validId, "invalid-user"));
+        }
+
+        @ParameterizedTest(name = "{0}日前の予約はキャンセル不可")
+        @ValueSource(ints = {1, 30})
+        void deleteReservation_過去日の予約なら400(int daysAgo) throws Exception {
+                UUID id = UUID.randomUUID();
+                String apiPath = "/api/reservations/" + id;
+                String userId = "demo-user-1";
+                LocalDate date = LocalDate.now(FIXED_CLOCK).minusDays(daysAgo);
+
+                Reservation reservation = mock(Reservation.class);
+                when(reservation.getUserId()).thenReturn(userId);
+                when(reservation.getReservationDate()).thenReturn(date);
+                when(service.getReservationById(id)).thenReturn(reservation);
+
+                mockMvc.perform(delete(apiPath).header("X-Demo-User", userId))
+                                .andExpect(status().isBadRequest())
+                                .andExpect(content().contentTypeCompatibleWith(
+                                                MediaType.APPLICATION_PROBLEM_JSON))
+                                .andExpect(jsonPath("$.title").value("Bad Request"))
+                                .andExpect(jsonPath("$.status").value(400))
+                                .andExpect(jsonPath("$.detail").value("過去の予約はキャンセルできません。"))
+                                .andExpect(jsonPath("$.instance").value(apiPath));
+
+                verify(service).getReservationById(id);
+                verify(service, never()).cancelReservation(any());
         }
 
         @Test
@@ -513,6 +543,8 @@ class ReservationControllerTest {
                         Reservation reservation = mock(Reservation.class);
                         when(reservation.getId()).thenReturn(id);
                         when(reservation.getUserId()).thenReturn(userId);
+                        when(reservation.getReservationDate())
+                                        .thenReturn(LocalDate.now(FIXED_CLOCK));
                         when(service.getReservationById(id)).thenReturn(reservation);
 
                         doThrow(exception).when(service).cancelReservation(id);

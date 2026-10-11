@@ -177,6 +177,9 @@ X-Demo-User: demo-user-1
 - 操作ユーザー自身の予約のみ、トランザクション内でDELETEする。
 - 予約履歴・キャンセル履歴は保持しない。
 - 削除済みの予約IDに再度リクエストした場合は`404 Not Found`を返す。
+- 予約対象日が日本時間（Asia/Tokyo）で当日以降の場合のみ、キャンセルを許可する。
+- 過去日の予約に対するキャンセルは、レコードを削除せず`400 Bad Request`を返す。
+- 判定順序は、予約の存在確認→所有者確認→予約日の検証→削除処理とする。
 
 ### 成功レスポンス
 
@@ -187,7 +190,7 @@ X-Demo-User: demo-user-1
 | HTTPステータス            | 条件                                             |
 | ------------------------- | ------------------------------------------------ |
 | 204 No Content            | キャンセル成功                                   |
-| 400 Bad Request           | 予約IDのUUID形式不正、または共通仕様の入力エラー |
+| 400 Bad Request           | 過去日の予約、予約IDのUUID形式不正、または共通仕様の入力エラー |
 | 403 Forbidden             | 他ユーザーの予約                                 |
 | 404 Not Found             | 予約IDが存在しない                               |
 | 500 Internal Server Error | システムエラー                                   |
@@ -228,6 +231,7 @@ Content-Type: application/problem+json
 | 403 Forbidden             | Forbidden             | 指定された予約はキャンセルできません。 |
 | 404 Not Found             | Not Found             | 指定された予約が見つかりません。       |
 | 409 Conflict              | Conflict              | 指定された日付・座席は予約済みです。   |
+| 400 Bad Request           | Bad Request           | 過去の予約はキャンセルできません。     |
 | 500 Internal Server Error | Internal Server Error | システムエラーが発生しました。         |
 
 エラー本文に他ユーザーのユーザー情報や、リクエストで指定されたもの以外の予約IDを含めない。`instance`にはクエリ文字列を含めない。システムエラーの内部情報やSQL、制約名、スタックトレースはレスポンスに含めない。
