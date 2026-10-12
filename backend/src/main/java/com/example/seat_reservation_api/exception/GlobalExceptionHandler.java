@@ -55,11 +55,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "リクエストの内容が不正です。");
     }
 
-    @ExceptionHandler(ReservationNotFoundException.class)
-    public ProblemDetail handleReservationNotFound(ReservationNotFoundException ex) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
-    }
-
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail handleDataIntegrityViolationException(DataIntegrityViolationException ex) {
         if (isConstraintViolation(ex, "uq_reservations_date_seat")) {

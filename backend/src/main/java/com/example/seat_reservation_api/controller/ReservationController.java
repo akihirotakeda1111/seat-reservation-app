@@ -5,7 +5,7 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,6 +21,7 @@ import jakarta.validation.constraints.NotNull;
 
 import com.example.seat_reservation_api.component.CurrentUserProvider;
 import com.example.seat_reservation_api.dto.request.CreateReservationRequest;
+import com.example.seat_reservation_api.dto.request.SeatsRequest;
 import com.example.seat_reservation_api.dto.response.ReservationsResponse;
 import com.example.seat_reservation_api.dto.response.SeatResponse;
 import com.example.seat_reservation_api.dto.response.SeatsResponse;
@@ -46,8 +47,10 @@ public class ReservationController {
     }
 
     @GetMapping("/seats")
-    public ResponseEntity<SeatsResponse> getSeatsByDate(@RequestParam @NotNull LocalDate date) {
+    public ResponseEntity<SeatsResponse> getSeatsByDate(
+            @Valid @ModelAttribute SeatsRequest request) {
 
+        LocalDate date = request.date();
         String userId = currentUserProvider.getUserId();
         SeatResponse[] seats = reservationService.getSeatsWithReservation(date).stream()
                 .map(row -> SeatResponse.from(row.getSeatNumber(), row.getReservation(), userId))
