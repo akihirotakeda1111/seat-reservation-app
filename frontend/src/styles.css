@@ -1,0 +1,322 @@
+:root {
+  color-scheme: light dark;
+  --s-bg: light-dark(#f5f7fa, #171c25);
+  --s-panel: light-dark(#fff, #202734);
+  --s-text: light-dark(#182638, #edf2f8);
+  --s-muted: light-dark(#57677a, #b3c0d0);
+  --s-line: light-dark(#dbe2eb, #465367);
+  --s-blue: light-dark(#245bd5, #92b6ff);
+  --s-onblue: light-dark(#fff, #101f3e);
+  --s-green: light-dark(#e3f4ea, #183c2d);
+  --s-green-text: light-dark(#18643f, #a1e5bd);
+  --s-red: light-dark(#fbe9e9, #42272c);
+  --s-red-text: light-dark(#9a3940, #f5b2b7);
+  font:
+    14px/1.55 system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'Noto Sans JP',
+    sans-serif;
+  color: var(--s-text);
+  background: var(--s-bg);
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button,
+input,
+select {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid var(--s-blue);
+  outline-offset: 3px;
+}
+.reservation-app {
+  max-width: 1100px;
+  margin: 24px auto;
+}
+.app-header {
+  padding: 22px 26px 20px;
+  background: var(--s-panel);
+  border-bottom: 1px solid var(--s-line);
+  border-radius: 16px 16px 0 0;
+}
+h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+}
+main {
+  padding: 24px;
+}
+.filters {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  align-items: end;
+  margin-bottom: 20px;
+}
+.filter-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  min-width: 0;
+}
+.filter-fields label {
+  display: grid;
+  gap: 7px;
+  font-weight: 600;
+}
+input,
+select {
+  color: var(--s-text);
+  background: var(--s-panel);
+  border: 1px solid var(--s-line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  min-height: 44px;
+  max-width: 100%;
+  min-width: 0;
+}
+.sync {
+  margin-left: auto;
+  color: var(--s-muted);
+  font-size: 12px;
+  padding-bottom: 6px;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 244px;
+  gap: 20px;
+}
+.floor,
+.action-panel {
+  background: var(--s-panel);
+  border: 1px solid var(--s-line);
+  border-radius: 12px;
+  padding: 20px;
+  min-width: 0;
+}
+.floor-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+h2 {
+  font-size: 16px;
+  margin: 0;
+  font-weight: 650;
+}
+.muted {
+  color: var(--s-muted);
+}
+.legend {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  margin-bottom: 22px;
+}
+.legend span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.swatch {
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--s-line);
+  border-radius: 3px;
+  background: var(--s-panel);
+}
+.swatch.mine {
+  background: var(--s-green);
+}
+.swatch.other {
+  background: var(--s-red);
+}
+.seat-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+.seat {
+  padding: 10px 2px;
+  min-height: 64px;
+  border: 1px solid var(--s-line);
+  border-radius: 8px;
+  background: var(--s-panel);
+  color: var(--s-text);
+  position: relative;
+}
+.seat strong {
+  display: block;
+  font-size: 16px;
+  font-weight: 650;
+}
+.seat > span {
+  display: block;
+  font-size: 11px;
+}
+.seat[data-state='MINE'] {
+  background: var(--s-green);
+  color: var(--s-green-text);
+}
+.seat[data-state='OCCUPIED'] {
+  background: var(--s-red);
+  color: var(--s-red-text);
+}
+.seat[aria-pressed='true'] {
+  outline: 3px solid var(--s-blue);
+  outline-offset: 2px;
+}
+.seat .selection-mark {
+  position: absolute;
+  top: -7px;
+  right: -5px;
+  color: var(--s-onblue);
+  background: var(--s-blue);
+  border-radius: 50%;
+  width: 19px;
+  height: 19px;
+  font-size: 12px;
+}
+.past .seat {
+  opacity: 0.65;
+}
+.footnote {
+  margin: 18px 0 0;
+  font-size: 12px;
+  color: var(--s-muted);
+}
+.selection {
+  margin: 22px 0;
+  min-height: 85px;
+}
+.seat-name {
+  font-size: 24px;
+  font-weight: 650;
+  margin: 4px 0;
+}
+.action {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  border-radius: 8px;
+  padding: 10px;
+  font-weight: 600;
+  border: 1px solid var(--s-line);
+  color: var(--s-text);
+  background: var(--s-panel);
+  margin-top: 10px;
+}
+.primary {
+  background: var(--s-blue);
+  color: var(--s-onblue);
+  border-color: var(--s-blue);
+}
+.action:disabled {
+  opacity: 0.4;
+}
+.message {
+  margin-top: 18px;
+  padding: 13px 16px;
+  border-radius: 8px;
+  background: var(--s-panel);
+  border-left: 3px solid var(--s-blue);
+  overflow-wrap: anywhere;
+}
+.message[data-kind='error'] {
+  border-color: var(--s-red-text);
+}
+.fetch-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.retry {
+  border: 1px solid var(--s-line);
+  border-radius: 8px;
+  padding: 8px 16px;
+  min-height: 44px;
+  color: var(--s-text);
+  background: var(--s-panel);
+}
+.empty-state {
+  color: var(--s-muted);
+  padding: 48px 0;
+  text-align: center;
+}
+@media (max-width: 760px) {
+  .reservation-app {
+    margin: 0 auto;
+  }
+  .app-header {
+    border-radius: 0;
+  }
+  .layout {
+    grid-template-columns: 1fr;
+  }
+  .selection {
+    min-height: 0;
+    margin: 14px 0;
+  }
+  .actions {
+    display: flex;
+    gap: 10px;
+  }
+  .actions button {
+    flex: 1;
+  }
+}
+@media (max-width: 420px) {
+  main {
+    padding: 14px;
+  }
+  .app-header {
+    padding-left: 16px;
+  }
+  .filters,
+  .filter-fields {
+    gap: 12px;
+  }
+  .filter-fields,
+  .filter-fields label {
+    width: 100%;
+  }
+  .sync {
+    margin-left: 0;
+  }
+  .floor,
+  .action-panel {
+    padding: 14px;
+  }
+  .seat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (pointer: coarse) {
+  input,
+  select {
+    font-size: 16px;
+  }
+}
