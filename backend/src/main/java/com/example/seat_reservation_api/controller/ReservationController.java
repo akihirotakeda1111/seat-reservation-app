@@ -47,8 +47,7 @@ public class ReservationController {
     }
 
     @GetMapping("/seats")
-    public ResponseEntity<SeatsResponse> getSeatsByDate(
-            @Valid @ModelAttribute SeatsRequest request) {
+    public ResponseEntity<SeatsResponse> getSeats(@Valid @ModelAttribute SeatsRequest request) {
 
         LocalDate date = request.date();
         String userId = currentUserProvider.getUserId();

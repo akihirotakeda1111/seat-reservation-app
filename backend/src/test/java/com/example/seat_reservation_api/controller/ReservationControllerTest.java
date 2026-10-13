@@ -64,7 +64,7 @@ class ReservationControllerTest {
         }
 
         @Test
-        void getSeatsByDate_空席を返す() throws Exception {
+        void getSeats_空席を返す() throws Exception {
                 String apiPath = "/api/seats";
                 String cacheControlHeader = "no-store";
                 String status = "AVAILABLE";
@@ -94,7 +94,7 @@ class ReservationControllerTest {
         }
 
         @Test
-        void getSeatsByDate_自分の予約IDのみ返す() throws Exception {
+        void getSeats_自分の予約IDのみ返す() throws Exception {
                 LocalDate date = LocalDate.now(FIXED_CLOCK);
                 String currentUserId = "demo-user-1";
                 UUID myReservationId = UUID.randomUUID();
@@ -140,8 +140,7 @@ class ReservationControllerTest {
 
         @ParameterizedTest(name = "{0}")
         @MethodSource("invalidGetSeatsCases")
-        void getSeatsByDate_入力不正なら400(String description, String date, String userId)
-                        throws Exception {
+        void getSeats_入力不正なら400(String description, String date, String userId) throws Exception {
                 String apiPath = "/api/seats";
                 var request = get(apiPath);
 
@@ -174,7 +173,7 @@ class ReservationControllerTest {
         }
 
         @Test
-        void getSeatsByDate_想定外の例外なら500() throws Exception {
+        void getSeats_想定外の例外なら500() throws Exception {
                 String apiPath = "/api/seats";
                 LocalDate date = LocalDate.now(FIXED_CLOCK);
 
