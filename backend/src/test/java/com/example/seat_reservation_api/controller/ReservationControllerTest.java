@@ -29,10 +29,13 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultMatcher;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.hibernate.exception.ConstraintViolationException;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -52,6 +55,9 @@ class ReservationControllerTest {
         @MockitoBean
         ReservationService service;
 
+        private static final String SEATS_PATH = "/api/seats";
+        private static final String RESERVATIONS_PATH = "/api/reservations";
+
         private static final Clock FIXED_CLOCK =
                         Clock.fixed(Instant.parse("2026-10-09T15:30:00Z"), ZoneId.of("Asia/Tokyo"));
 
@@ -68,19 +74,17 @@ class ReservationControllerTest {
         class GetSeatsTests {
                 @Test
                 void 空席を返す() throws Exception {
-                        String apiPath = "/api/seats";
                         String cacheControlHeader = "no-store";
                         String status = "AVAILABLE";
                         LocalDate date = LocalDate.now(FIXED_CLOCK).plusDays(1);
                         Short seatNumber = 1;
                         String userId = "demo-user-1";
 
-                        SeatReservationView row = mock(SeatReservationView.class);
-                        when(row.getSeatNumber()).thenReturn(seatNumber);
+                        SeatReservationView row = seatRow(seatNumber, null);
                         when(service.getSeatsWithReservation(date)).thenReturn(List.of(row));
 
-                        mockMvc.perform(get(apiPath).param("date", date.toString())
-                                        .header("X-Demo-User", userId)).andExpect(status().isOk())
+                        mockMvc.perform(seatsRequest(date.toString(), userId))
+                                        .andExpect(status().isOk())
                                         .andExpect(content().contentTypeCompatibleWith(
                                                         MediaType.APPLICATION_JSON))
                                         .andExpect(header().string("Cache-Control",
@@ -100,30 +104,22 @@ class ReservationControllerTest {
                 void 自分の予約IDのみ返す() throws Exception {
                         LocalDate date = LocalDate.now(FIXED_CLOCK);
                         String currentUserId = "demo-user-1";
+                        String otherUserId = "demo-user-2";
                         UUID myReservationId = UUID.randomUUID();
                         UUID otherReservationId = UUID.randomUUID();
 
-                        Reservation myReservation = mock(Reservation.class);
-                        when(myReservation.getUserId()).thenReturn(currentUserId);
-                        when(myReservation.getId()).thenReturn(myReservationId);
+                        Reservation myReservation =
+                                        reservationSummary(myReservationId, currentUserId);
+                        Reservation otherReservation =
+                                        reservationSummary(otherReservationId, otherUserId);
 
-                        Reservation otherReservation = mock(Reservation.class);
-                        when(otherReservation.getUserId()).thenReturn("demo-user-2");
-                        when(otherReservation.getId()).thenReturn(otherReservationId);
-
-                        SeatReservationView mySeat = mock(SeatReservationView.class);
-                        when(mySeat.getSeatNumber()).thenReturn((short) 1);
-                        when(mySeat.getReservation()).thenReturn(myReservation);
-
-                        SeatReservationView otherSeat = mock(SeatReservationView.class);
-                        when(otherSeat.getSeatNumber()).thenReturn((short) 2);
-                        when(otherSeat.getReservation()).thenReturn(otherReservation);
+                        SeatReservationView mySeat = seatRow((short) 1, myReservation);
+                        SeatReservationView otherSeat = seatRow((short) 2, otherReservation);
 
                         when(service.getSeatsWithReservation(date))
                                         .thenReturn(List.of(mySeat, otherSeat));
 
-                        mockMvc.perform(get("/api/seats").param("date", date.toString())
-                                        .header("X-Demo-User", currentUserId))
+                        mockMvc.perform(seatsRequest(date.toString(), currentUserId))
                                         .andExpect(status().isOk())
                                         .andExpect(content().contentTypeCompatibleWith(
                                                         MediaType.APPLICATION_JSON))
@@ -147,24 +143,10 @@ class ReservationControllerTest {
                 @ParameterizedTest(name = "{0}")
                 @MethodSource("invalidGetSeatsCases")
                 void 入力不正なら400(String description, String date, String userId) throws Exception {
-                        String apiPath = "/api/seats";
-                        var request = get(apiPath);
-
-                        if (date != null) {
-                                request.param("date", date);
-                        }
-                        if (userId != null) {
-                                request.header("X-Demo-User", userId);
-                        }
-
-                        mockMvc.perform(request).andExpect(status().isBadRequest())
-                                        .andExpect(content().contentTypeCompatibleWith(
-                                                        MediaType.APPLICATION_PROBLEM_JSON))
+                        mockMvc.perform(seatsRequest(date, userId))
                                         .andExpect(header().string("Cache-Control", "no-store"))
-                                        .andExpect(jsonPath("$.title").value("Bad Request"))
-                                        .andExpect(jsonPath("$.status").value(400))
-                                        .andExpect(jsonPath("$.detail").value("リクエストの内容が不正です。"))
-                                        .andExpect(jsonPath("$.instance").value(apiPath));
+                                        .andExpectAll(problem(HttpStatus.BAD_REQUEST,
+                                                        "リクエストの内容が不正です。", SEATS_PATH));
 
                         verifyNoInteractions(service);
                 }
@@ -180,25 +162,32 @@ class ReservationControllerTest {
 
                 @Test
                 void 想定外の例外なら500() throws Exception {
-                        String apiPath = "/api/seats";
                         LocalDate date = LocalDate.now(FIXED_CLOCK);
+                        String userId = "demo-user-1";
 
                         when(service.getSeatsWithReservation(date))
                                         .thenThrow(new RuntimeException("内部システムエラー"));
 
-                        mockMvc.perform(get(apiPath).param("date", date.toString())
-                                        .header("X-Demo-User", "demo-user-1"))
-                                        .andExpect(status().isInternalServerError())
-                                        .andExpect(content().contentTypeCompatibleWith(
-                                                        MediaType.APPLICATION_PROBLEM_JSON))
+                        mockMvc.perform(seatsRequest(date.toString(), userId))
                                         .andExpect(header().string("Cache-Control", "no-store"))
-                                        .andExpect(jsonPath("$.title")
-                                                        .value("Internal Server Error"))
-                                        .andExpect(jsonPath("$.status").value(500))
-                                        .andExpect(jsonPath("$.detail").value("システムエラーが発生しました。"))
-                                        .andExpect(jsonPath("$.instance").value(apiPath));
+                                        .andExpectAll(problem(HttpStatus.INTERNAL_SERVER_ERROR,
+                                                        "システムエラーが発生しました。", SEATS_PATH));
 
                         verify(service).getSeatsWithReservation(date);
+                }
+
+                private SeatReservationView seatRow(short seatNumber, Reservation reservation) {
+                        SeatReservationView row = mock(SeatReservationView.class);
+                        when(row.getSeatNumber()).thenReturn(seatNumber);
+                        when(row.getReservation()).thenReturn(reservation);
+                        return row;
+                }
+
+                private Reservation reservationSummary(UUID id, String userId) {
+                        Reservation reservation = mock(Reservation.class);
+                        when(reservation.getId()).thenReturn(id);
+                        when(reservation.getUserId()).thenReturn(userId);
+                        return reservation;
                 }
         }
 
@@ -208,7 +197,6 @@ class ReservationControllerTest {
                 @ValueSource(ints = {0, 1})
                 void 正常な場合(int offsetDays) throws Exception {
                         UUID id = UUID.randomUUID();
-                        String apiPath = "/api/reservations";
                         LocalDate date = LocalDate.now(FIXED_CLOCK).plusDays(offsetDays);
                         short seatNumber = 1;
                         String userId = "demo-user-1";
@@ -221,11 +209,8 @@ class ReservationControllerTest {
                         when(service.reserve(date, userId, seatNumber)).thenReturn(id);
                         when(service.getReservationById(id)).thenReturn(saved);
 
-                        mockMvc.perform(post(apiPath).contentType(MediaType.APPLICATION_JSON)
-                                        .header("X-Demo-User", userId).content("""
-                                                        {"date": "%s", "seatNumber": %d}
-                                                        """.formatted(date, seatNumber)))
-                                        .andExpect(status().isCreated())
+                        mockMvc.perform(createReservationRequest(reservationBody(date, seatNumber),
+                                        userId)).andExpect(status().isCreated())
                                         .andExpect(content().contentTypeCompatibleWith(
                                                         MediaType.APPLICATION_JSON))
                                         .andExpect(jsonPath("$.id").value(id.toString()))
@@ -240,21 +225,9 @@ class ReservationControllerTest {
                 @ParameterizedTest(name = "{0}")
                 @MethodSource("invalidCreateReservationCases")
                 void 入力不正なら400(String description, String body, String userId) throws Exception {
-                        String apiPath = "/api/reservations";
-                        var request = post(apiPath).contentType(MediaType.APPLICATION_JSON)
-                                        .content(body);
-
-                        if (userId != null) {
-                                request.header("X-Demo-User", userId);
-                        }
-
-                        mockMvc.perform(request).andExpect(status().isBadRequest())
-                                        .andExpect(content().contentTypeCompatibleWith(
-                                                        MediaType.APPLICATION_PROBLEM_JSON))
-                                        .andExpect(jsonPath("$.title").value("Bad Request"))
-                                        .andExpect(jsonPath("$.status").value(400))
-                                        .andExpect(jsonPath("$.detail").value("リクエストの内容が不正です。"))
-                                        .andExpect(jsonPath("$.instance").value(apiPath));
+                        mockMvc.perform(createReservationRequest(body, userId))
+                                        .andExpectAll(problem(HttpStatus.BAD_REQUEST,
+                                                        "リクエストの内容が不正です。", RESERVATIONS_PATH));
 
                         verifyNoInteractions(service);
                 }
@@ -264,9 +237,7 @@ class ReservationControllerTest {
                         LocalDate pastDate = LocalDate.now(FIXED_CLOCK).minusDays(1);
                         String validUser = "demo-user-1";
 
-                        String validBody = """
-                                        {"date": "%s", "seatNumber": 1}
-                                        """.formatted(futureDate);
+                        String validBody = reservationBody(futureDate, 1);
 
                         return Stream.of(Arguments.of("ユーザーヘッダー未指定", validBody, null),
                                         Arguments.of("ユーザーヘッダー不正", validBody, "invalid-user"),
@@ -280,21 +251,19 @@ class ReservationControllerTest {
                                                         {"date": "invalid-date", "seatNumber": 1}
                                                         """, validUser), Arguments.of("存在しない日付", """
                                                         {"date": "2026-10-32", "seatNumber": 1}
-                                                        """, validUser), Arguments.of("過去日", """
-                                                        {"date": "%s", "seatNumber": 1}
-                                                        """.formatted(pastDate), validUser),
+                                                        """, validUser),
+                                        Arguments.of("過去日", reservationBody(pastDate, 1),
+                                                        validUser),
                                         Arguments.of("座席番号未指定", """
                                                         {"date": "%s"}
                                                         """.formatted(futureDate), validUser),
                                         Arguments.of("座席番号がnull", """
                                                         {"date": "%s", "seatNumber": null}
                                                         """.formatted(futureDate), validUser),
-                                        Arguments.of("座席番号が0", """
-                                                        {"date": "%s", "seatNumber": 0}
-                                                        """.formatted(futureDate), validUser),
-                                        Arguments.of("座席番号が負数", """
-                                                        {"date": "%s", "seatNumber": -1}
-                                                        """.formatted(futureDate), validUser),
+                                        Arguments.of("座席番号が0", reservationBody(futureDate, 0),
+                                                        validUser),
+                                        Arguments.of("座席番号が負数", reservationBody(futureDate, -1),
+                                                        validUser),
                                         Arguments.of("座席番号が数値に変換できない文字列", """
                                                         {"date": "%s", "seatNumber": "abc"}
                                                         """.formatted(futureDate), validUser));
@@ -302,7 +271,6 @@ class ReservationControllerTest {
 
                 @Test
                 void 座席マスタに存在しない番号なら400() throws Exception {
-                        String apiPath = "/api/reservations";
                         LocalDate date = LocalDate.now(FIXED_CLOCK).plusDays(1);
                         String userId = "demo-user-1";
                         short seatNumber = 31;
@@ -310,17 +278,10 @@ class ReservationControllerTest {
                         when(service.reserve(date, userId, seatNumber))
                                         .thenThrow(new InvalidSeatException());
 
-                        mockMvc.perform(post(apiPath).contentType(MediaType.APPLICATION_JSON)
-                                        .header("X-Demo-User", userId).content("""
-                                                        {"date": "%s", "seatNumber": %d}
-                                                        """.formatted(date, seatNumber)))
-                                        .andExpect(status().isBadRequest())
-                                        .andExpect(content().contentTypeCompatibleWith(
-                                                        MediaType.APPLICATION_PROBLEM_JSON))
-                                        .andExpect(jsonPath("$.title").value("Bad Request"))
-                                        .andExpect(jsonPath("$.status").value(400))
-                                        .andExpect(jsonPath("$.detail").value("リクエストの内容が不正です。"))
-                                        .andExpect(jsonPath("$.instance").value(apiPath));
+                        mockMvc.perform(createReservationRequest(reservationBody(date, seatNumber),
+                                        userId))
+                                        .andExpectAll(problem(HttpStatus.BAD_REQUEST,
+                                                        "リクエストの内容が不正です。", RESERVATIONS_PATH));
 
                         verify(service).reserve(date, userId, seatNumber);
                         verify(service, never()).getReservationById(any());
@@ -329,32 +290,16 @@ class ReservationControllerTest {
                 @ParameterizedTest(name = "予約済みなら409：userId={0}")
                 @ValueSource(strings = {"demo-user-1", "demo-user-2"})
                 void 予約済みなら409(String userId) throws Exception {
-                        String apiPath = "/api/reservations";
                         LocalDate date = LocalDate.now(FIXED_CLOCK).plusDays(1);
                         Short seatNumber = 1;
 
-                        var cause = new ConstraintViolationException("重複予約",
-                                        new SQLException("unique violation", "23505"),
-                                        "uq_reservations_date_seat");
-
                         when(service.reserve(date, userId, seatNumber)).thenThrow(
-                                        new DataIntegrityViolationException("予約の登録に失敗しました", cause));
+                                        constraintViolation("uq_reservations_date_seat", "23505"));
 
-                        mockMvc.perform(post(apiPath).contentType(MediaType.APPLICATION_JSON)
-                                        .content("""
-                                                        {
-                                                        "date": "%s",
-                                                        "seatNumber": %d
-                                                        }
-                                                        """.formatted(date, seatNumber))
-                                        .header("X-Demo-User", userId))
-                                        .andExpect(status().isConflict())
-                                        .andExpect(content().contentTypeCompatibleWith(
-                                                        MediaType.APPLICATION_PROBLEM_JSON))
-                                        .andExpect(jsonPath("$.title").value("Conflict"))
-                                        .andExpect(jsonPath("$.status").value(409))
-                                        .andExpect(jsonPath("$.detail").value("指定された日付・座席は予約済みです。"))
-                                        .andExpect(jsonPath("$.instance").value(apiPath));
+                        mockMvc.perform(createReservationRequest(reservationBody(date, seatNumber),
+                                        userId))
+                                        .andExpectAll(problem(HttpStatus.CONFLICT,
+                                                        "指定された日付・座席は予約済みです。", RESERVATIONS_PATH));
 
                         verify(service).reserve(date, userId, seatNumber);
                 }
@@ -362,25 +307,16 @@ class ReservationControllerTest {
                 @ParameterizedTest(name = "{0}")
                 @MethodSource("reservationServerErrorCases")
                 void 想定外の例外なら500(String description, RuntimeException exception) throws Exception {
-                        String apiPath = "/api/reservations";
                         LocalDate date = LocalDate.now(FIXED_CLOCK).plusDays(1);
                         short seatNumber = 1;
                         String userId = "demo-user-1";
 
                         when(service.reserve(date, userId, seatNumber)).thenThrow(exception);
 
-                        mockMvc.perform(post(apiPath).contentType(MediaType.APPLICATION_JSON)
-                                        .header("X-Demo-User", userId).content("""
-                                                        {"date": "%s", "seatNumber": %d}
-                                                        """.formatted(date, seatNumber)))
-                                        .andExpect(status().isInternalServerError())
-                                        .andExpect(content().contentTypeCompatibleWith(
-                                                        MediaType.APPLICATION_PROBLEM_JSON))
-                                        .andExpect(jsonPath("$.title")
-                                                        .value("Internal Server Error"))
-                                        .andExpect(jsonPath("$.status").value(500))
-                                        .andExpect(jsonPath("$.detail").value("システムエラーが発生しました。"))
-                                        .andExpect(jsonPath("$.instance").value(apiPath));
+                        mockMvc.perform(createReservationRequest(reservationBody(date, seatNumber),
+                                        userId))
+                                        .andExpectAll(problem(HttpStatus.INTERNAL_SERVER_ERROR,
+                                                        "システムエラーが発生しました。", RESERVATIONS_PATH));
 
                         verify(service).reserve(date, userId, seatNumber);
                         verify(service, never()).getReservationById(any());
@@ -410,6 +346,12 @@ class ReservationControllerTest {
                                         Arguments.of("一般例外", new RuntimeException("内部システムエラー")));
                 }
 
+                private static String reservationBody(LocalDate date, int seatNumber) {
+                        return """
+                                        {"date": "%s", "seatNumber": %d}
+                                        """.formatted(date, seatNumber);
+                }
+
                 private static DataIntegrityViolationException constraintViolation(
                                 String constraintName, String sqlState) {
                         var cause = new ConstraintViolationException("内部制約エラー",
@@ -425,17 +367,14 @@ class ReservationControllerTest {
                 @ValueSource(ints = {0, 1})
                 void 正常な場合(int offsetDays) throws Exception {
                         UUID id = UUID.randomUUID();
-                        String apiPath = "/api/reservations/" + id;
                         String userId = "demo-user-1";
                         LocalDate date = LocalDate.now(FIXED_CLOCK).plusDays(offsetDays);
 
-                        Reservation reservation = mock(Reservation.class);
+                        Reservation reservation = reservationForCancellation(userId, date);
                         when(reservation.getId()).thenReturn(id);
-                        when(reservation.getUserId()).thenReturn(userId);
-                        when(reservation.getReservationDate()).thenReturn(date);
                         when(service.getReservationById(id)).thenReturn(reservation);
 
-                        mockMvc.perform(delete(apiPath).header("X-Demo-User", userId))
+                        mockMvc.perform(deleteReservationRequest(id.toString(), userId))
                                         .andExpect(status().isNoContent())
                                         .andExpect(content().string(""));
 
@@ -447,20 +386,10 @@ class ReservationControllerTest {
                 @MethodSource("invalidDeleteReservationCases")
                 void 入力不正なら400(String description, String reservationId, String userId)
                                 throws Exception {
-                        String apiPath = "/api/reservations/" + reservationId;
-                        var request = delete(apiPath);
-
-                        if (userId != null) {
-                                request.header("X-Demo-User", userId);
-                        }
-
-                        mockMvc.perform(request).andExpect(status().isBadRequest())
-                                        .andExpect(content().contentTypeCompatibleWith(
-                                                        MediaType.APPLICATION_PROBLEM_JSON))
-                                        .andExpect(jsonPath("$.title").value("Bad Request"))
-                                        .andExpect(jsonPath("$.status").value(400))
-                                        .andExpect(jsonPath("$.detail").value("リクエストの内容が不正です。"))
-                                        .andExpect(jsonPath("$.instance").value(apiPath));
+                        mockMvc.perform(deleteReservationRequest(reservationId, userId))
+                                        .andExpectAll(problem(HttpStatus.BAD_REQUEST,
+                                                        "リクエストの内容が不正です。",
+                                                        reservationPath(reservationId)));
 
                         verifyNoInteractions(service);
                 }
@@ -482,23 +411,16 @@ class ReservationControllerTest {
                 @ValueSource(ints = {1, 30})
                 void 過去日の予約なら400(int daysAgo) throws Exception {
                         UUID id = UUID.randomUUID();
-                        String apiPath = "/api/reservations/" + id;
                         String userId = "demo-user-1";
                         LocalDate date = LocalDate.now(FIXED_CLOCK).minusDays(daysAgo);
 
-                        Reservation reservation = mock(Reservation.class);
-                        when(reservation.getUserId()).thenReturn(userId);
-                        when(reservation.getReservationDate()).thenReturn(date);
+                        Reservation reservation = reservationForCancellation(userId, date);
                         when(service.getReservationById(id)).thenReturn(reservation);
 
-                        mockMvc.perform(delete(apiPath).header("X-Demo-User", userId))
-                                        .andExpect(status().isBadRequest())
-                                        .andExpect(content().contentTypeCompatibleWith(
-                                                        MediaType.APPLICATION_PROBLEM_JSON))
-                                        .andExpect(jsonPath("$.title").value("Bad Request"))
-                                        .andExpect(jsonPath("$.status").value(400))
-                                        .andExpect(jsonPath("$.detail").value("過去の予約はキャンセルできません。"))
-                                        .andExpect(jsonPath("$.instance").value(apiPath));
+                        mockMvc.perform(deleteReservationRequest(id.toString(), userId))
+                                        .andExpectAll(problem(HttpStatus.BAD_REQUEST,
+                                                        "過去の予約はキャンセルできません。",
+                                                        reservationPath(id.toString())));
 
                         verify(service).getReservationById(id);
                         verify(service, never()).cancelReservation(any());
@@ -507,7 +429,6 @@ class ReservationControllerTest {
                 @Test
                 void 他人の予約なら403() throws Exception {
                         UUID id = UUID.randomUUID();
-                        String apiPath = "/api/reservations/{id}";
                         LocalDate date = LocalDate.now(FIXED_CLOCK).plusDays(1);
                         Short seatNumber = 1;
                         String userId = "demo-user-1";
@@ -516,16 +437,10 @@ class ReservationControllerTest {
                         Reservation reservation = new Reservation(date, seatNumber, userId);
                         when(service.getReservationById(id)).thenReturn(reservation);
 
-                        mockMvc.perform(delete(apiPath, id).header("X-Demo-User", otherUserId))
-                                        .andExpect(status().isForbidden())
-                                        .andExpect(content().contentTypeCompatibleWith(
-                                                        MediaType.APPLICATION_PROBLEM_JSON))
-                                        .andExpect(jsonPath("$.title").value("Forbidden"))
-                                        .andExpect(jsonPath("$.status").value(403))
-                                        .andExpect(jsonPath("$.detail")
-                                                        .value("指定された予約はキャンセルできません。"))
-                                        .andExpect(jsonPath("$.instance").value(
-                                                        apiPath.replace("{id}", id.toString())));
+                        mockMvc.perform(deleteReservationRequest(id.toString(), otherUserId))
+                                        .andExpectAll(problem(HttpStatus.FORBIDDEN,
+                                                        "指定された予約はキャンセルできません。",
+                                                        reservationPath(id.toString())));
 
                         verify(service, never()).cancelReservation(any());
                 }
@@ -533,19 +448,14 @@ class ReservationControllerTest {
                 @Test
                 void 予約が存在しないなら404() throws Exception {
                         UUID id = UUID.randomUUID();
-                        String apiPath = "/api/reservations/" + id;
                         String userId = "demo-user-1";
 
                         when(service.getReservationById(id)).thenReturn(null);
 
-                        mockMvc.perform(delete(apiPath).header("X-Demo-User", userId))
-                                        .andExpect(status().isNotFound())
-                                        .andExpect(content().contentTypeCompatibleWith(
-                                                        MediaType.APPLICATION_PROBLEM_JSON))
-                                        .andExpect(jsonPath("$.title").value("Not Found"))
-                                        .andExpect(jsonPath("$.status").value(404))
-                                        .andExpect(jsonPath("$.detail").value("指定された予約が見つかりません。"))
-                                        .andExpect(jsonPath("$.instance").value(apiPath));
+                        mockMvc.perform(deleteReservationRequest(id.toString(), userId))
+                                        .andExpectAll(problem(HttpStatus.NOT_FOUND,
+                                                        "指定された予約が見つかりません。",
+                                                        reservationPath(id.toString())));
 
                         verify(service).getReservationById(id);
                         verify(service, never()).cancelReservation(any());
@@ -555,7 +465,6 @@ class ReservationControllerTest {
                 @ValueSource(strings = {"予約照会時", "予約削除時"})
                 void 想定外の例外なら500(String failurePoint) throws Exception {
                         UUID id = UUID.randomUUID();
-                        String apiPath = "/api/reservations/" + id;
                         String userId = "demo-user-1";
                         var exception = new RuntimeException("内部システムエラー");
 
@@ -564,25 +473,18 @@ class ReservationControllerTest {
                         if (lookupFails) {
                                 when(service.getReservationById(id)).thenThrow(exception);
                         } else {
-                                Reservation reservation = mock(Reservation.class);
+                                Reservation reservation = reservationForCancellation(userId,
+                                                LocalDate.now(FIXED_CLOCK));
                                 when(reservation.getId()).thenReturn(id);
-                                when(reservation.getUserId()).thenReturn(userId);
-                                when(reservation.getReservationDate())
-                                                .thenReturn(LocalDate.now(FIXED_CLOCK));
                                 when(service.getReservationById(id)).thenReturn(reservation);
 
                                 doThrow(exception).when(service).cancelReservation(id);
                         }
 
-                        mockMvc.perform(delete(apiPath).header("X-Demo-User", userId))
-                                        .andExpect(status().isInternalServerError())
-                                        .andExpect(content().contentTypeCompatibleWith(
-                                                        MediaType.APPLICATION_PROBLEM_JSON))
-                                        .andExpect(jsonPath("$.title")
-                                                        .value("Internal Server Error"))
-                                        .andExpect(jsonPath("$.status").value(500))
-                                        .andExpect(jsonPath("$.detail").value("システムエラーが発生しました。"))
-                                        .andExpect(jsonPath("$.instance").value(apiPath));
+                        mockMvc.perform(deleteReservationRequest(id.toString(), userId))
+                                        .andExpectAll(problem(HttpStatus.INTERNAL_SERVER_ERROR,
+                                                        "システムエラーが発生しました。",
+                                                        reservationPath(id.toString())));
 
                         verify(service).getReservationById(id);
 
@@ -592,5 +494,54 @@ class ReservationControllerTest {
                                 verify(service).cancelReservation(id);
                         }
                 }
+
+                private Reservation reservationForCancellation(String userId, LocalDate date) {
+                        Reservation reservation = mock(Reservation.class);
+                        when(reservation.getUserId()).thenReturn(userId);
+                        when(reservation.getReservationDate()).thenReturn(date);
+                        return reservation;
+                }
+        }
+
+        private static String reservationPath(String reservationId) {
+                return RESERVATIONS_PATH + "/" + reservationId;
+        }
+
+        private static MockHttpServletRequestBuilder seatsRequest(String date, String userId) {
+                var request = get(SEATS_PATH);
+                if (date != null) {
+                        request.param("date", date);
+                }
+                return withUser(request, userId);
+        }
+
+        private static MockHttpServletRequestBuilder createReservationRequest(String body,
+                        String userId) {
+                return withUser(post(RESERVATIONS_PATH).contentType(MediaType.APPLICATION_JSON)
+                                .content(body), userId);
+        }
+
+        private static MockHttpServletRequestBuilder deleteReservationRequest(String reservationId,
+                        String userId) {
+                return withUser(delete(RESERVATIONS_PATH + "/{id}", reservationId), userId);
+        }
+
+        private static MockHttpServletRequestBuilder withUser(MockHttpServletRequestBuilder request,
+                        String userId) {
+                if (userId != null) {
+                        request.header("X-Demo-User", userId);
+                }
+                return request;
+        }
+
+        private static ResultMatcher[] problem(HttpStatus expectedStatus, String expectedDetail,
+                        String expectedPath) {
+                return new ResultMatcher[] {status().is(expectedStatus.value()),
+                                content().contentTypeCompatibleWith(
+                                                MediaType.APPLICATION_PROBLEM_JSON),
+                                jsonPath("$.title").value(expectedStatus.getReasonPhrase()),
+                                jsonPath("$.status").value(expectedStatus.value()),
+                                jsonPath("$.detail").value(expectedDetail),
+                                jsonPath("$.instance").value(expectedPath)};
         }
 }
