@@ -1,17 +1,10 @@
 package com.example.seat_reservation_api.integration;
 
-import com.example.seat_reservation_api.entity.Reservation;
 import com.example.seat_reservation_api.repository.ReservationRepository;
-import java.net.URI;
 import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpRequest.Builder;
 import java.net.http.HttpResponse;
-import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -34,17 +27,11 @@ import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -53,7 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /** doc/testing/api-integration-test-matrix.md の実HTTP・実DBによる結合テスト。 */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles({"local", "test"})
-@Import(ReservationApiIntegrationTest.IntegrationConfig.class)
+@Import(ReservationIntegrationTestConfig.class)
 @Isolated
 @Execution(ExecutionMode.SAME_THREAD)
 class ReservationApiIntegrationTest {
@@ -61,24 +48,7 @@ class ReservationApiIntegrationTest {
     private static final String A = "demo-user-1";
     private static final String B = "demo-user-2";
     private static final String RESERVATIONS = "/api/reservations";
-    private static final Clock FIXED_CLOCK =
-            Clock.fixed(Instant.parse("2026-10-10T15:30:00Z"), ZoneId.of("Asia/Tokyo"));
-    private static final LocalDate D = LocalDate.now(FIXED_CLOCK);
-
-    @TestConfiguration(proxyBeanMethods = false)
-    static class IntegrationConfig {
-        @Bean
-        @ServiceConnection
-        PostgreSQLContainer postgres() {
-            return new PostgreSQLContainer("postgres:17-alpine");
-        }
-
-        @Bean
-        @Primary
-        Clock integrationClock() {
-            return FIXED_CLOCK;
-        }
-    }
+    private static final LocalDate D = LocalDate.now(ReservationIntegrationTestConfig.FIXED_CLOCK);
 
     @LocalServerPort
     int port;
@@ -93,14 +63,16 @@ class ReservationApiIntegrationTest {
     ObjectMapper mapper;
 
     private HttpClient client;
+    private ReservationIntegrationTestSupport support;
+    private ReservationHttpTestSupport httpSupport;
 
     @BeforeEach
     void setUp() {
+        support = new ReservationIntegrationTestSupport(reservations, jdbc);
         reservations.deleteAllInBatch();
-        assertThat(jdbc.queryForList("select seat_number from seats order by seat_number",
-                Integer.class)).containsExactlyElementsOf(
-                        java.util.stream.IntStream.rangeClosed(1, 30).boxed().toList());
+        support.assertSeatMaster();
         client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+        httpSupport = new ReservationHttpTestSupport(mapper, support, client, port);
     }
 
     @AfterEach
@@ -115,41 +87,42 @@ class ReservationApiIntegrationTest {
         @Test
         @DisplayName("GET-01: 全席空席")
         void allSeatsAvailable() throws Exception {
-            List<Map<String, Object>> before = snapshot();
+            List<Map<String, Object>> before = support.snapshot();
             assertAvailable(seats(getSeats(D.toString(), A)), 0);
-            assertThat(snapshot()).isEqualTo(before);
+            assertThat(support.snapshot()).isEqualTo(before);
         }
 
         @Test
         @DisplayName("GET-02: 自分・他人の予約と空席が混在")
         void mixedSeatStates() throws Exception {
-            UUID mine = save(D, 1, A);
-            save(D, 2, B);
-            List<Map<String, Object>> before = snapshot();
+            UUID mine = support.save(D, 1, A);
+            support.save(D, 2, B);
+            List<Map<String, Object>> before = support.snapshot();
             JsonNode seats = seats(getSeats(D.toString(), A));
             assertThat(seats.get(0).path("status").asString()).isEqualTo("MINE");
             assertThat(seats.get(0).path("reservationId").asString()).isEqualTo(mine.toString());
             assertThat(seats.get(1).path("status").asString()).isEqualTo("OCCUPIED");
             assertThat(seats.get(1).has("reservationId")).isFalse();
             assertAvailable(seats, 2);
-            assertThat(snapshot()).isEqualTo(before);
+            assertThat(support.snapshot()).isEqualTo(before);
         }
 
         @Test
         @DisplayName("GET-03: 別日の予約を除外")
         void excludesOtherDate() throws Exception {
-            save(D.plusDays(1), 1, A);
-            List<Map<String, Object>> before = snapshot();
+            support.save(D.plusDays(1), 1, A);
+            List<Map<String, Object>> before = support.snapshot();
             assertAvailable(seats(getSeats(D.toString(), A)), 0);
-            assertThat(snapshot()).isEqualTo(before);
+            assertThat(support.snapshot()).isEqualTo(before);
         }
 
         @Test
         @DisplayName("GET-04: リクエストパラメータ不正の代表値")
         void invalidGetDate() throws Exception {
-            List<Map<String, Object>> before = snapshot();
-            assertProblem(getSeats("invalid", A), 400, "/api/seats");
-            assertThat(snapshot()).isEqualTo(before);
+            List<Map<String, Object>> before = support.snapshot();
+            httpSupport.assertProblem(getSeats("invalid", A), 400, "/api/seats",
+                    "リクエストの内容が不正です。");
+            assertThat(support.snapshot()).isEqualTo(before);
         }
 
         @ParameterizedTest
@@ -157,9 +130,10 @@ class ReservationApiIntegrationTest {
         @ValueSource(strings = "invalid-user")
         @DisplayName("GET-05: ユーザーヘッダー不正")
         void invalidGetHeader(String user) throws Exception {
-            List<Map<String, Object>> before = snapshot();
-            assertProblem(getSeats(D.toString(), user), 400, "/api/seats");
-            assertThat(snapshot()).isEqualTo(before);
+            List<Map<String, Object>> before = support.snapshot();
+            httpSupport.assertProblem(getSeats(D.toString(), user), 400, "/api/seats",
+                    "リクエストの内容が不正です。");
+            assertThat(support.snapshot()).isEqualTo(before);
         }
     }
 
@@ -168,18 +142,18 @@ class ReservationApiIntegrationTest {
         @Test
         @DisplayName("POST-01: 当日予約")
         void reserveToday() throws Exception {
-            assertCreated(post(D, 1, A), D, 1, A);
-            assertThat(snapshot()).hasSize(1);
+            httpSupport.assertCreated(httpSupport.post(D, 1, A), D, 1, A);
+            assertThat(support.snapshot()).hasSize(1);
         }
 
         @Test
         @DisplayName("POST-02: 当日予約後、同じ座席で翌日予約")
         void reserveSameSeatNextDay() throws Exception {
-            UUID today = assertCreated(post(D, 1, A), D, 1, A);
-            List<Map<String, Object>> before = snapshot();
-            UUID tomorrow = assertCreated(post(D.plusDays(1), 1, A), D.plusDays(1), 1, A);
+            UUID today = httpSupport.assertCreated(httpSupport.post(D, 1, A), D, 1, A);
+            List<Map<String, Object>> before = support.snapshot();
+            UUID tomorrow = httpSupport.assertCreated(httpSupport.post(D.plusDays(1), 1, A), D.plusDays(1), 1, A);
             assertThat(tomorrow).isNotEqualTo(today);
-            assertThat(snapshot()).hasSize(2).containsAll(before);
+            assertThat(support.snapshot()).hasSize(2).containsAll(before);
         }
 
         @Test
@@ -201,33 +175,34 @@ class ReservationApiIntegrationTest {
             try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
                 Future<HttpResponse<String>> a = executor.submit(() -> {
                     start.await(10, TimeUnit.SECONDS);
-                    return post(D, 1, A);
+                    return httpSupport.post(D, 1, A);
                 });
                 Future<HttpResponse<String>> b = executor.submit(() -> {
                     start.await(10, TimeUnit.SECONDS);
-                    return post(D, 1, B);
+                    return httpSupport.post(D, 1, B);
                 });
                 HttpResponse<String> responseA = a.get(45, TimeUnit.SECONDS);
                 HttpResponse<String> responseB = b.get(45, TimeUnit.SECONDS);
                 assertThat(List.of(responseA.statusCode(), responseB.statusCode()))
                         .containsExactlyInAnyOrder(201, 409);
                 boolean aWon = responseA.statusCode() == 201;
-                assertCreated(aWon ? responseA : responseB, D, 1, aWon ? A : B);
-                assertProblem(aWon ? responseB : responseA, 409, RESERVATIONS);
-                assertThat(snapshot()).hasSize(1);
+                httpSupport.assertCreated(aWon ? responseA : responseB, D, 1, aWon ? A : B);
+                httpSupport.assertProblem(aWon ? responseB : responseA, 409, RESERVATIONS,
+                        "指定された日付・座席は予約済みです。");
+                assertThat(support.snapshot()).hasSize(1);
             }
         }
 
         @Test
         @DisplayName("POST-06: 前日予約")
         void pastDate() throws Exception {
-            assertRejectedPost(body(D.minusDays(1), 1), A);
+            assertRejectedPost(httpSupport.body(D.minusDays(1), 1), A);
         }
 
         @Test
         @DisplayName("POST-07: マスタにない座席を予約")
         void unknownSeat() throws Exception {
-            assertRejectedPost(body(D, 31), A);
+            assertRejectedPost(httpSupport.body(D, 31), A);
         }
 
         @Test
@@ -241,7 +216,7 @@ class ReservationApiIntegrationTest {
         @ValueSource(strings = "invalid-user")
         @DisplayName("POST-09: ユーザーヘッダー不正")
         void invalidPostHeader(String user) throws Exception {
-            assertRejectedPost(body(D, 1), user);
+            assertRejectedPost(httpSupport.body(D, 1), user);
         }
 
         @Test
@@ -256,42 +231,46 @@ class ReservationApiIntegrationTest {
         @Test
         @DisplayName("DEL-01: 自分の予約を1件だけ削除し、同日・別日の予約を保持")
         void deletesOnlyTarget() throws Exception {
-            UUID target = save(D, 1, A);
-            save(D, 2, A);
-            save(D.plusDays(1), 1, A);
+            UUID target = support.save(D, 1, A);
+            support.save(D, 2, A);
+            support.save(D.plusDays(1), 1, A);
             List<Map<String, Object>> remaining =
-                    snapshot().stream().filter(row -> !target.equals(row.get("id"))).toList();
-            assertDeleted(delete(target.toString(), A));
-            assertThat(snapshot()).hasSize(2).isEqualTo(remaining);
+                    support.snapshot().stream().filter(row -> !target.equals(row.get("id"))).toList();
+            httpSupport.assertDeleted(httpSupport.delete(target.toString(), A));
+            assertThat(support.snapshot()).hasSize(2).isEqualTo(remaining);
         }
 
         @Test
         @DisplayName("DEL-02: 他ユーザーの予約を削除")
         void cannotDeleteOthersReservation() throws Exception {
-            UUID target = save(D, 1, B);
-            assertRejectedDelete(target.toString(), A, 403);
+            UUID target = support.save(D, 1, B);
+            assertRejectedDelete(target.toString(), A, 403,
+                    "指定された予約はキャンセルできません。");
         }
 
         @Test
         @DisplayName("DEL-03: 存在しない予約を削除")
         void unknownReservation() throws Exception {
-            assertRejectedDelete(UUID.randomUUID().toString(), A, 404);
+            assertRejectedDelete(UUID.randomUUID().toString(), A, 404,
+                    "指定された予約が見つかりません。");
         }
 
         @Test
         @DisplayName("DEL-04: 存在する予約を2回削除")
         void deleteTwice() throws Exception {
-            String target = save(D, 1, A).toString();
-            assertDeleted(delete(target, A));
-            assertThat(snapshot()).isEmpty();
-            assertRejectedDelete(target, A, 404);
+            String target = support.save(D, 1, A).toString();
+            httpSupport.assertDeleted(httpSupport.delete(target, A));
+            assertThat(support.snapshot()).isEmpty();
+            assertRejectedDelete(target, A, 404,
+                    "指定された予約が見つかりません。");
         }
 
         @Test
         @DisplayName("DEL-05: リクエストパラメータ不正の代表値")
         void invalidReservationId() throws Exception {
-            save(D, 1, A);
-            assertRejectedDelete("invalid", A, 400);
+            support.save(D, 1, A);
+            assertRejectedDelete("invalid", A, 400,
+                    "リクエストの内容が不正です。");
         }
 
         @ParameterizedTest
@@ -299,90 +278,43 @@ class ReservationApiIntegrationTest {
         @ValueSource(strings = "invalid-user")
         @DisplayName("DEL-06: ユーザーヘッダー不正")
         void invalidDeleteHeader(String user) throws Exception {
-            UUID target = save(D, 1, A);
-            assertRejectedDelete(target.toString(), user, 400);
+            UUID target = support.save(D, 1, A);
+            assertRejectedDelete(target.toString(), user, 400,
+                    "リクエストの内容が不正です。");
         }
 
         @Test
         @DisplayName("DEL-07: 過去日の予約はキャンセルできない")
         void cannotDeletePastReservation() throws Exception {
-            UUID target = save(D.minusDays(1), 1, A);
-            List<Map<String, Object>> before = snapshot();
+            UUID target = support.save(D.minusDays(1), 1, A);
+            List<Map<String, Object>> before = support.snapshot();
 
-            HttpResponse<String> response = delete(target.toString(), A);
+            HttpResponse<String> response = httpSupport.delete(target.toString(), A);
 
-            JsonNode root = json(response, 400, MediaType.APPLICATION_PROBLEM_JSON);
-            assertThat(root.path("status").asInt()).isEqualTo(400);
-            assertThat(root.path("title").asString()).isEqualTo("Bad Request");
-            assertThat(root.path("detail").asString()).isEqualTo("過去の予約はキャンセルできません。");
-            assertThat(root.path("instance").asString()).isEqualTo(RESERVATIONS + "/" + target);
-            assertThat(snapshot()).isEqualTo(before);
+            httpSupport.assertProblem(response, 400, RESERVATIONS + "/" + target,
+                    "過去の予約はキャンセルできません。");
+            assertThat(support.snapshot()).isEqualTo(before);
         }
 
         @Test
         @DisplayName("DEL-08: 他人の過去日の予約には400ではなく403を返す")
         void cannotDeleteOthersPastReservation() throws Exception {
-            UUID target = save(D.minusDays(1), 1, B);
+            UUID target = support.save(D.minusDays(1), 1, B);
 
-            assertRejectedDelete(target.toString(), A, 403);
+            assertRejectedDelete(target.toString(), A, 403,
+                    "指定された予約はキャンセルできません。");
         }
     }
 
-    private UUID save(LocalDate date, int seat, String user) {
-        return reservations.saveAndFlush(new Reservation(date, (short) seat, user)).getId();
-    }
-
-    private List<Map<String, Object>> snapshot() {
-        return jdbc.queryForList("select * from reservations order by id");
-    }
-
-    private String body(LocalDate date, int seat) {
-        return "{\"date\":\"%s\",\"seatNumber\":%d}".formatted(date, seat);
-    }
-
-    private HttpResponse<String> request(String method, String path, String user, String body)
-            throws Exception {
-        Builder builder = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
-                .timeout(Duration.ofSeconds(30));
-        if (user != null) {
-            builder.header("X-Demo-User", user);
-        }
-        if (body != null) {
-            builder.header("Content-Type", "application/json");
-        }
-        return client.send(
-                builder.method(method,
-                        body == null ? HttpRequest.BodyPublishers.noBody()
-                                : HttpRequest.BodyPublishers.ofString(body))
-                        .build(),
-                HttpResponse.BodyHandlers.ofString());
-    }
 
     private HttpResponse<String> getSeats(String date, String user) throws Exception {
-        HttpResponse<String> response = request("GET", "/api/seats?date=" + date, user, null);
+        HttpResponse<String> response = httpSupport.request("GET", "/api/seats?date=" + date, user, null);
         assertThat(response.headers().firstValue("Cache-Control")).contains("no-store");
         return response;
     }
 
-    private HttpResponse<String> post(LocalDate date, int seat, String user) throws Exception {
-        return request("POST", RESERVATIONS, user, body(date, seat));
-    }
-
-    private HttpResponse<String> delete(String id, String user) throws Exception {
-        return request("DELETE", RESERVATIONS + "/" + id, user, null);
-    }
-
-    private JsonNode json(HttpResponse<String> response, int status, MediaType type) {
-        assertThat(response.statusCode()).as("HTTP response: %s", response.body())
-                .isEqualTo(status);
-        assertThat(MediaType
-                .parseMediaType(response.headers().firstValue("Content-Type").orElseThrow())
-                .isCompatibleWith(type)).isTrue();
-        return mapper.readTree(response.body());
-    }
-
     private JsonNode seats(HttpResponse<String> response) {
-        JsonNode root = json(response, 200, MediaType.APPLICATION_JSON);
+        JsonNode root = httpSupport.json(response, 200, MediaType.APPLICATION_JSON);
         assertThat(root.path("date").asString()).isEqualTo(D.toString());
         assertThat(root.has("userId")).isFalse();
         JsonNode seats = root.path("seats");
@@ -402,60 +334,27 @@ class ReservationApiIntegrationTest {
         }
     }
 
-    private UUID assertCreated(HttpResponse<String> response, LocalDate date, int seat,
-            String user) {
-        JsonNode root = json(response, 201, MediaType.APPLICATION_JSON);
-        UUID id = UUID.fromString(root.path("id").asString());
-        assertThat(root.path("date").asString()).isEqualTo(date.toString());
-        assertThat(root.path("seatNumber").asInt()).isEqualTo(seat);
-        assertThat(response.headers().firstValue("Location")).contains(RESERVATIONS + "/" + id);
-        Map<String, Object> saved = jdbc.queryForMap("select * from reservations where id = ?", id);
-        assertThat(saved.get("reservation_date")).isEqualTo(java.sql.Date.valueOf(date));
-        assertThat(((Number) saved.get("seat_number")).intValue()).isEqualTo(seat);
-        assertThat(saved.get("user_id")).isEqualTo(user);
-        assertThat(saved.get("created_at")).isNotNull();
-        return id;
-    }
-
-    private void assertProblem(HttpResponse<String> response, int status, String path) {
-        JsonNode root = json(response, status, MediaType.APPLICATION_PROBLEM_JSON);
-        assertThat(root.path("status").asInt()).isEqualTo(status);
-        assertThat(root.path("title").asString())
-                .isEqualTo(HttpStatus.valueOf(status).getReasonPhrase());
-        assertThat(root.path("instance").asString()).isEqualTo(path);
-        String detail = switch (status) {
-            case 400 -> "リクエストの内容が不正です。";
-            case 403 -> "指定された予約はキャンセルできません。";
-            case 404 -> "指定された予約が見つかりません。";
-            case 409 -> "指定された日付・座席は予約済みです。";
-            default -> throw new IllegalArgumentException("Unexpected status: " + status);
-        };
-        assertThat(root.path("detail").asString()).isEqualTo(detail);
-    }
-
     private void assertDuplicate(String secondUser) throws Exception {
-        assertCreated(post(D, 1, A), D, 1, A);
-        List<Map<String, Object>> before = snapshot();
+        httpSupport.assertCreated(httpSupport.post(D, 1, A), D, 1, A);
+        List<Map<String, Object>> before = support.snapshot();
         assertThat(before).hasSize(1);
-        assertProblem(post(D, 1, secondUser), 409, RESERVATIONS);
-        assertThat(snapshot()).isEqualTo(before);
+        httpSupport.assertProblem(httpSupport.post(D, 1, secondUser), 409, RESERVATIONS,
+                "指定された日付・座席は予約済みです。");
+        assertThat(support.snapshot()).isEqualTo(before);
     }
 
     private void assertRejectedPost(String body, String user) throws Exception {
-        List<Map<String, Object>> before = snapshot();
-        assertProblem(request("POST", RESERVATIONS, user, body), 400, RESERVATIONS);
+        List<Map<String, Object>> before = support.snapshot();
+        httpSupport.assertProblem(httpSupport.request("POST", RESERVATIONS, user, body), 400, RESERVATIONS,
+                "リクエストの内容が不正です。");
         assertThat(before).isEmpty();
-        assertThat(snapshot()).isEqualTo(before);
+        assertThat(support.snapshot()).isEqualTo(before);
     }
 
-    private void assertRejectedDelete(String id, String user, int status) throws Exception {
-        List<Map<String, Object>> before = snapshot();
-        assertProblem(delete(id, user), status, RESERVATIONS + "/" + id);
-        assertThat(snapshot()).isEqualTo(before);
+    private void assertRejectedDelete(String id, String user, int status, String detail) throws Exception {
+        List<Map<String, Object>> before = support.snapshot();
+        httpSupport.assertProblem(httpSupport.delete(id, user), status, RESERVATIONS + "/" + id, detail);
+        assertThat(support.snapshot()).isEqualTo(before);
     }
 
-    private void assertDeleted(HttpResponse<String> response) {
-        assertThat(response.statusCode()).as("HTTP response: %s", response.body()).isEqualTo(204);
-        assertThat(response.body()).isEmpty();
-    }
 }
