@@ -14,6 +14,7 @@ import com.example.seat_reservation_api.repository.SeatRepository;
 import com.example.seat_reservation_api.repository.SeatReservationView;
 import com.example.seat_reservation_api.entity.Reservation;
 import com.example.seat_reservation_api.exception.InvalidSeatException;
+import com.example.seat_reservation_api.exception.ReservationNotFoundException;
 import java.util.Optional;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -122,12 +123,27 @@ class ReservationServiceTest {
         }
     }
 
-    @Test
-    void cancelReservation_指定IDの予約を削除する() {
-        UUID id = UUID.randomUUID();
+    @Nested
+    class CancelReserveTest {
+        @Test
+        void cancelReservation_指定IDの予約を削除する() {
+            UUID id = UUID.randomUUID();
+            when(reservationRepository.deleteReservationById(id)).thenReturn(1);
 
-        service.cancelReservation(id);
+            service.cancelReservation(id);
 
-        verify(reservationRepository).deleteById(id);
+            verify(reservationRepository).deleteReservationById(id);
+        }
+
+        @Test
+        void cancelReservation_削除対象がなければ予約なしの例外を返す() {
+            UUID id = UUID.randomUUID();
+            when(reservationRepository.deleteReservationById(id)).thenReturn(0);
+
+            assertThatThrownBy(() -> service.cancelReservation(id))
+                    .isInstanceOf(ReservationNotFoundException.class);
+
+            verify(reservationRepository).deleteReservationById(id);
+        }
     }
 }

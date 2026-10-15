@@ -2,6 +2,7 @@ package com.example.seat_reservation_api.service;
 
 import com.example.seat_reservation_api.entity.Reservation;
 import com.example.seat_reservation_api.exception.InvalidSeatException;
+import com.example.seat_reservation_api.exception.ReservationNotFoundException;
 import com.example.seat_reservation_api.repository.ReservationRepository;
 import com.example.seat_reservation_api.repository.SeatRepository;
 import java.time.LocalDate;
@@ -43,6 +44,9 @@ public class ReservationService {
 
     @Transactional
     public void cancelReservation(UUID reservationId) {
-        reservationRepository.deleteById(reservationId);
+        int deleted = reservationRepository.deleteReservationById(reservationId);
+        if (deleted == 0) {
+            throw new ReservationNotFoundException();
+        }
     }
 }

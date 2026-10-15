@@ -34,6 +34,35 @@ class ReservationRepositoryTest {
         @Autowired
         SeatRepository seatRepository;
 
+        @Autowired
+        jakarta.persistence.EntityManager entityManager;
+
+        @Nested
+        class DeleteReservationByIdTest {
+                @Test
+                void 指定予約だけを削除して件数を返す() {
+                        LocalDate date = LocalDate.of(2026, 10, 10);
+                        Reservation target = reservationRepository.saveAndFlush(
+                                        new Reservation(date, (short) 1, "demo-user-1"));
+                        Reservation remaining = reservationRepository.saveAndFlush(
+                                        new Reservation(date, (short) 2, "demo-user-2"));
+                        entityManager.refresh(remaining);
+
+                        assertThat(reservationRepository.deleteReservationById(target.getId())).isEqualTo(1);
+                        entityManager.clear();
+                        assertThat(reservationRepository.findById(target.getId())).isEmpty();
+                        assertThat(reservationRepository.findAll()).singleElement()
+                                        .usingRecursiveComparison().isEqualTo(remaining);
+                        assertThat(reservationRepository.deleteReservationById(target.getId())).isZero();
+                }
+
+                @Test
+                void 存在しないIDなら0件を返す() {
+                        assertThat(reservationRepository.deleteReservationById(java.util.UUID.randomUUID()))
+                                        .isZero();
+                }
+        }
+
         @Nested
         class FindSeatsWithReservationTest {
                 @Test
@@ -41,8 +70,7 @@ class ReservationRepositoryTest {
                         LocalDate reservationDate = LocalDate.of(2026, 10, 1);
                         Short seatNumber = 1;
                         String userId = "demo-user-1";
-                        Reservation reservation =
-                                        new Reservation(reservationDate, seatNumber, userId);
+                        Reservation reservation = new Reservation(reservationDate, seatNumber, userId);
                         reservationRepository.save(reservation);
 
                         List<SeatReservationView> result = reservationRepository
@@ -94,8 +122,7 @@ class ReservationRepositoryTest {
                         LocalDate reservationDate = LocalDate.of(2026, 10, 1);
                         short seatNumber = 1;
                         String userId = "demo-user-1";
-                        Reservation reservation =
-                                        new Reservation(reservationDate, seatNumber, userId);
+                        Reservation reservation = new Reservation(reservationDate, seatNumber, userId);
                         reservationRepository.save(reservation);
 
                         List<Reservation> result = reservationRepository

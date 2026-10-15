@@ -5,6 +5,7 @@ import com.example.seat_reservation_api.config.ValidationConfig;
 import com.example.seat_reservation_api.entity.Reservation;
 import com.example.seat_reservation_api.exception.GlobalExceptionHandler;
 import com.example.seat_reservation_api.exception.InvalidSeatException;
+import com.example.seat_reservation_api.exception.ReservationNotFoundException;
 import com.example.seat_reservation_api.filter.SeatCacheControlFilter;
 import com.example.seat_reservation_api.repository.SeatReservationView;
 import com.example.seat_reservation_api.service.ReservationService;
@@ -459,6 +460,23 @@ class ReservationControllerTest {
 
                         verify(service).getReservationById(id);
                         verify(service, never()).cancelReservation(any());
+                }
+
+                @Test
+                void 確認後に予約が削除されていたら404() throws Exception {
+                        UUID id = UUID.randomUUID();
+                        String userId = "demo-user-1";
+                        Reservation reservation = reservationForCancellation(userId,
+                                        LocalDate.now(FIXED_CLOCK));
+                        when(reservation.getId()).thenReturn(id);
+                        when(service.getReservationById(id)).thenReturn(reservation);
+                        doThrow(new ReservationNotFoundException()).when(service).cancelReservation(id);
+
+                        mockMvc.perform(deleteReservationRequest(id.toString(), userId))
+                                        .andExpectAll(problem(HttpStatus.NOT_FOUND,
+                                                        "指定された予約が見つかりません。",
+                                                        reservationPath(id.toString())));
+                        verify(service).cancelReservation(id);
                 }
 
                 @ParameterizedTest(name = "{0}")
