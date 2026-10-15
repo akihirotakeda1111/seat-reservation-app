@@ -33,6 +33,7 @@ java/com/example/seat_reservation_api/
 ├── exception/
 │   ├── GlobalExceptionHandler.java    # 共通の例外処理
 │   ├── InvalidSeatException.java       # 座席マスタ参照の例外
+│   └── ReservationNotFoundException.java # 削除対象競合の例外
 ├── filter/
 │   └── SeatCacheControlFilter.java     # 座席照会のキャッシュ無効フィルター
 ├── repository/
@@ -47,21 +48,35 @@ java/com/example/seat_reservation_api/
 
 ## Integration Test
 
+テストクラスは`src/test/java/com/example/seat_reservation_api/integration/`に配置する。
+
+| テストクラス | 検証内容 |
+| --- | --- |
+| `ReservationApiIntegrationTest` | 実HTTPによるAPI契約・入力検証・業務ルール・DB状態 |
+| `ReservationConcurrencyIntegrationTest` | 実HTTPによる同時予約・キャンセル・再予約、異なるリソースの独立した進行、正常終了・DB例外時の応答 |
+| `ReservationTransactionIntegrationTest` | ServiceのTransaction境界、flush / commit時の例外、rollback、独立DB接続での競合・待機、DB操作とHTTPの組合せ |
+
+共通の環境設定は`ReservationIntegrationTestConfig`、DBの準備・検証は`ReservationIntegrationTestSupport`、HTTP操作・応答検証は`ReservationHttpTestSupport`にまとめる。Transaction / ConcurrencyのケースIDは各メソッドの`@DisplayName`と[テスト定義](../doc/testing/transaction-concurrency-test-matrix.md)で対応付ける。
+
 JDK 25（`JAVA_HOME`設定）と起動済みDockerを用意し、`backend`ディレクトリで実行する。Mavenは同梱のWrapperを使用する。
 
-Windows / PowerShell：
+結合テスト3クラスを実行する場合（Windows / PowerShell）：
 
 ```powershell
-.\mvnw.cmd '-Dtest=ReservationApiIntegrationTest' test
+.\mvnw.cmd '-Dtest=ReservationApiIntegrationTest,ReservationConcurrencyIntegrationTest,ReservationTransactionIntegrationTest' test
 ```
 
 macOS / Linux：
 
 ```sh
-./mvnw -Dtest=ReservationApiIntegrationTest test
+./mvnw '-Dtest=ReservationApiIntegrationTest,ReservationConcurrencyIntegrationTest,ReservationTransactionIntegrationTest' test
 ```
 
-実HTTPからController・Service・Repository・PostgreSQLまでを検証する。Testcontainersが専用のPostgreSQLを起動し、Flywayでテーブルと初期データを作成するため、Composeでの事前起動は不要。初回は依存関係とコンテナイメージのダウンロードが必要。
+特定のクラスだけ実行する場合は、`-Dtest`にそのクラス名だけを指定する。
+
+Testcontainersが専用のPostgreSQL 17を起動し、Flywayでテーブルと初期データを作成するため、Composeでの事前起動は不要。初回は依存関係とコンテナイメージのダウンロードが必要。
+
+Transaction / Concurrencyテストはケース間を直列実行し、ケース内のHTTPや独立DB接続を並列化する。自由な競合は反復し、順序を制御するケースではSQLの待機や先行Transaction保留中の後続完了を確認する。反復回数・期待結果・検証対象外の範囲はテスト定義を参照。
 
 Backendの全テストを実行する場合は、Windowsでは`.\mvnw.cmd test`、macOS / Linuxでは`./mvnw test`を使用する。結果は`target/surefire-reports`に出力される。
 
@@ -79,3 +94,4 @@ Backendの全テストを実行する場合は、Windowsでは`.\mvnw.cmd test`�
 - [API定義](../doc/system-design/api-definition.md)：リクエスト・レスポンス、業務ルール、エラー仕様
 - [データモデル定義](../doc/system-design/data-model.md)：テーブル構造、制約、初期データ
 - [API結合テストマトリクス](../doc/testing/api-integration-test-matrix.md)：検証項目
+- [Transaction / Concurrencyテスト定義](../doc/testing/transaction-concurrency-test-matrix.md)：実装単位のケースID・実施方法・期待動作・検証結果

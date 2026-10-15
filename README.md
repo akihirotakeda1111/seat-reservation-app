@@ -130,6 +130,14 @@ Composeのビルドではテストを実行しない。開発・検証手順は[
 
 主要な設計判断はADR（Architecture Decision Record）として記録する。
 
+## Transaction / Concurrency
+
+二重予約は日付・座席のUNIQUE制約で防止し、予約・キャンセルはService単位のTransactionで確定する。同時予約の対象制約違反は409、同時キャンセルで削除対象が先に消えた場合は削除件数に基づいて404を返す。
+
+実HTTP・Service・独立DB接続を使う結合テストで、競合時の応答、commit / rollback後の整合性、別日付・別座席の操作が先行Transactionの完了を待たずに進むことを検証する。
+
+検証範囲は[Transaction / Concurrencyテスト定義](doc/testing/transaction-concurrency-test-matrix.md)、実行方法は[Backend README](backend/README.md#integration-test)、設計判断は[ADR-005](doc/adr/adr-005.md)を参照。
+
 ## ドキュメント
 
 | 種類 | ドキュメント |
@@ -137,7 +145,7 @@ Composeのビルドではテストを実行しない。開発・検証手順は[
 | Frontend開発・検証 | [Frontend README](frontend/README.md) |
 | Backend開発・検証 | [Backend README](backend/README.md) |
 | 詳細仕様 | [API定義](doc/system-design/api-definition.md)、[データモデル定義](doc/system-design/data-model.md)、[Frontend仕様](doc/system-design/frontend-specification.md) |
-| 検証項目 | [API結合テスト](doc/testing/api-integration-test-matrix.md)、[Frontendテスト](doc/testing/frontend-test-matrix.md) |
+| 検証項目 | [API結合テスト](doc/testing/api-integration-test-matrix.md)、[Transaction / Concurrencyテスト](doc/testing/transaction-concurrency-test-matrix.md)、[Frontendテスト](doc/testing/frontend-test-matrix.md) |
 
 設計判断の記録：
 
@@ -145,3 +153,4 @@ Composeのビルドではテストを実行しない。開発・検証手順は[
 - [ADR-002：Phase 1における仮ユーザー識別方式](doc/adr/adr-002.md)
 - [ADR-003：APIエラーレスポンスの標準化](doc/adr/adr-003.md)
 - [ADR-004：ローカル環境のCompose統合起動](doc/adr/adr-004.md)
+- [ADR-005：予約・キャンセルの競合制御とTransaction境界](doc/adr/adr-005.md)
