@@ -18,6 +18,7 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -72,6 +73,7 @@ class ReservationControllerTest {
         }
 
         @Nested
+        @DisplayName("座席一覧取得")
         class GetSeatsTests {
                 @Test
                 void 空席を返す() throws Exception {
@@ -193,6 +195,7 @@ class ReservationControllerTest {
         }
 
         @Nested
+        @DisplayName("予約登録")
         class CreateReservationTests {
                 @ParameterizedTest(name = "基準日から{0}日後の予約は201")
                 @ValueSource(ints = {0, 1})
@@ -363,6 +366,7 @@ class ReservationControllerTest {
         }
 
         @Nested
+        @DisplayName("キャンセル")
         class DeleteReservationTests {
                 @ParameterizedTest(name = "基準日から{0}日後の予約はキャンセル可能")
                 @ValueSource(ints = {0, 1})

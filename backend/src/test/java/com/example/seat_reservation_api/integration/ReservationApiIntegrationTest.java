@@ -83,6 +83,7 @@ class ReservationApiIntegrationTest {
     }
 
     @Nested
+    @DisplayName("座席一覧取得")
     class GetSeatsTests {
         @Test
         @DisplayName("GET-01: 全席空席")
@@ -138,6 +139,7 @@ class ReservationApiIntegrationTest {
     }
 
     @Nested
+    @DisplayName("予約登録")
     class CreateReservationTests {
         @Test
         @DisplayName("POST-01: 当日予約")
@@ -227,6 +229,7 @@ class ReservationApiIntegrationTest {
     }
 
     @Nested
+    @DisplayName("キャンセル")
     class DeleteReservationTests {
         @Test
         @DisplayName("DEL-01: 自分の予約を1件だけ削除し、同日・別日の予約を保持")

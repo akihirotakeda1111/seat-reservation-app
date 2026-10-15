@@ -1,6 +1,7 @@
 package com.example.seat_reservation_api.service;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -51,6 +52,7 @@ class ReservationServiceTest {
     }
 
     @Nested
+    @DisplayName("IDで予約取得")
     class GetReservationByIdTest {
         @Test
         void 予約が存在すれば結果を返す() {
@@ -80,6 +82,7 @@ class ReservationServiceTest {
     }
 
     @Nested
+    @DisplayName("予約登録")
     class ReserveTest {
         @Test
         void 予約を保存し採番IDを返す() {
@@ -124,6 +127,7 @@ class ReservationServiceTest {
     }
 
     @Nested
+    @DisplayName("キャンセル")
     class CancelReserveTest {
         @Test
         void cancelReservation_指定IDの予約を削除する() {

@@ -4,6 +4,7 @@ import com.example.seat_reservation_api.entity.Reservation;
 
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -12,6 +13,7 @@ import static org.mockito.Mockito.*;
 class SeatResponseTest {
 
     @Nested
+    @DisplayName("座席レスポンス変換")
     class FromTest {
         @Test
         void 予約がなければAVAILABLEで予約IDを返さない() {

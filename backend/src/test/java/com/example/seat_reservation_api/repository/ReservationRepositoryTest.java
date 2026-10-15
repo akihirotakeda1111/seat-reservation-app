@@ -1,6 +1,7 @@
 package com.example.seat_reservation_api.repository;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Sort;
@@ -38,6 +39,7 @@ class ReservationRepositoryTest {
         jakarta.persistence.EntityManager entityManager;
 
         @Nested
+        @DisplayName("IDで予約削除")
         class DeleteReservationByIdTest {
                 @Test
                 void 指定予約だけを削除して件数を返す() {
@@ -64,6 +66,7 @@ class ReservationRepositoryTest {
         }
 
         @Nested
+        @DisplayName("予約情報と座席の一覧取得")
         class FindSeatsWithReservationTest {
                 @Test
                 void 座席マスタ全件と予約情報を結合して返す() {
@@ -116,6 +119,7 @@ class ReservationRepositoryTest {
         }
 
         @Nested
+        @DisplayName("予約日で予約検索")
         class FindByReservationDateTest {
                 @Test
                 void 予約が存在すれば結果を返す() {
