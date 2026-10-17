@@ -4,16 +4,17 @@
 
 | 項目         | 定義                                                                                          |
 | ------------ | --------------------------------------------------------------------------------------------- |
-| テスト範囲   | HTTP → Controller → Service → Repository → PostgreSQL                                         |
-| Mock         | 使用しない                                                                                    |
+| テスト範囲 | HTTP → Security Filter → Controller → Service → Repository → PostgreSQL |
+| Mock | 業務処理・Repositoryは実物。認証基盤のみテスト用の鍵・Decoderへ差し替える |
 | テストDB     | Testcontainersで起動した専用PostgreSQL                                                        |
 | 初期データ   | Flywayで座席1〜30を登録                                                                       |
 | データ分離   | 各テスト開始前に予約データを削除                                                              |
 | 実行方式     | 同じDBを使用するテストは直列実行。ただし、同時POSTのケース内では2件のリクエストを並行送信する |
 | 基準日       | アプリケーションのClockにおける当日をDとする                                                  |
-| ユーザーA    | `demo-user-1`                                                                                 |
-| ユーザーB    | `demo-user-2`                                                                                 |
-| 通常ヘッダー | `X-Demo-User: demo-user-1`                                                                    |
+| ユーザーA | 一般ユーザー。既存一般APIテストは`sub=demo-user-1`、管理者API・認可テストは`sub=user-a` |
+| ユーザーB | 一般ユーザー。既存一般APIテストは`sub=demo-user-2`、管理者API・認可テストは`sub=user-b` |
+| 管理者M | `sub=admin-user`、`cognito:groups=["ADMINS"]`。A/Bとは異なる所有者 |
+| 通常ヘッダー | `Authorization: Bearer <Aのテスト用Access Token>` |
 | POST形式     | `Content-Type: application/json`                                                              |
 | 結果の記入   | 未実施／OK／NG／対象外                                                                        |
 
@@ -29,7 +30,7 @@
 | GET-02   | 正常 | 自分・他人の予約と空席が混在     | D・座席1をA、D・座席2をBが予約 | date=D、ユーザーA      | 200      | 座席1はMINEで予約IDが一致、座席2はOCCUPIEDで予約ID非公開、残りはAVAILABLE、userId非公開 | 変更なし         | OK     |
 | GET-03   | 正常 | 別日の予約を除外                 | D+1・座席1に予約あり           | date=D、ユーザーA      | 200      | 座席1がAVAILABLE                                                                        | 別日の予約を保持 | OK     |
 | GET-04   | 異常 | リクエストパラメータ不正の代表値 | 予約なし                       | date=invalid           | 400      | 入力エラーを返す                                                                        | 変更なし         | OK     |
-| GET-05   | 異常 | ユーザーヘッダー不正             | 予約なし                       | 未指定／空／許可外の値 | 400      | 各入力でエラーを返す                                                                    | 変更なし         | OK     |
+| GET-05 | 認証 | トークンなし・不正 | 予約なし | Authorization未指定／Bearerトークンなし／Bearer invalid-token | 401 | ProblemDetailとWWW-Authenticateを確認 | 変更なし | OK |
 | GET-\_\_ | ＿＿ | ＿＿                             | ＿＿                           | ＿＿                   | ＿＿     | ＿＿                                                                                    | ＿＿             | 未実施 |
 
 共通確認：正常時はJSONを返す。正常・異常ともに`Cache-Control: no-store`を確認する。
@@ -50,7 +51,7 @@
 | POST-06   | 異常・境界 | 前日予約                              | 予約なし             | date=D-1、座席1                                   | 400                  | 入力エラーを返す                                                     | 登録なし                                            | OK     |
 | POST-07   | 異常       | マスタにない座席を予約                | 予約なし、座席31なし | date=D、seatNumber=31                             | 400                  | 入力エラーを返す                                                     | 登録なし                                            | OK     |
 | POST-08   | 異常       | リクエストパラメータ不正の代表値      | 予約なし             | date=D、seatNumberを省略                          | 400                  | 必須項目の入力エラーを返す                                           | 登録なし                                            | OK     |
-| POST-09   | 異常       | ユーザーヘッダー不正                  | 予約なし             | 正常なボディ、ヘッダーは未指定／空／許可外の値    | 400                  | 各入力でエラーを返す                                                 | 登録なし                                            | OK     |
+| POST-09 | 認証 | トークンなし・不正 | 予約なし | 正常な本文、Authorization未指定／Bearerトークンなし／Bearer invalid-token | 401 | ProblemDetailとWWW-Authenticateを確認 | 登録なし | OK |
 | POST-10   | 異常       | リクエストボディ不正                  | 予約なし             | JSONの閉じ括弧が欠けたボディ                      | 400                  | JSON読み取り失敗のエラーを返す                                       | 登録なし                                            | OK     |
 | POST-\_\_ | ＿＿       | ＿＿                                  | ＿＿                 | ＿＿                                              | ＿＿                 | ＿＿                                                                 | ＿＿                                                | 未実施 |
 
@@ -69,17 +70,73 @@
 | DEL-03   | 異常           | 存在しない予約を削除                              | 指定IDの予約なし                                     | 存在しないUUID、ユーザーA                   | 404                | 未検出エラーを返す                               | 変更なし                                          | OK     |
 | DEL-04   | 異常           | 存在する予約を2回削除                             | Aの予約あり                                          | 同じ予約IDでAが順番に2回削除                | 1回目204、2回目404 | 1回目は本文なし、2回目は未検出エラーを返す       | 1回目で削除され、2回目も削除済みのまま            | OK     |
 | DEL-05   | 異常           | リクエストパラメータ不正の代表値                  | Aの予約あり                                          | id=invalid、ユーザーA                       | 400                | 入力エラーを返す                                 | 変更なし                                          | OK     |
-| DEL-06   | 異常           | ユーザーヘッダー不正                              | Aの予約あり                                          | Aの予約ID、ヘッダーは未指定／空／許可外の値 | 400                | 各入力でエラーを返す                             | 対象予約を保持                                    | OK     |
+| DEL-06 | 認証 | トークンなし・不正 | Aの予約あり | 正常なUUID、Authorization未指定／Bearerトークンなし／Bearer invalid-token | 401 | ProblemDetailとWWW-Authenticateを確認 | 対象予約を保持 | OK |
 | DEL-07   | 異常・境界     | 過去日の予約をキャンセル                          | Aの「D-1・座席1」の予約をRepositoryで事前登録        | 過去日の予約ID、ユーザーA                   | 400                | 「過去の予約はキャンセルできません。」を返す     | 対象予約が全項目変更されずに残る                  | OK     |
 | DEL-08   | 異常・判定順序 | 他人の過去日の予約をキャンセル                    | Bの「D-1・座席1」の予約をRepositoryで事前登録        | Bの過去日の予約ID、ユーザーA                | 403                | 「指定された予約はキャンセルできません。」を返す | 対象予約が全項目変更されずに残る                  | OK     |
 | DEL-\_\_ | ＿＿           | ＿＿                                              | ＿＿                                                 | ＿＿                                        | ＿＿               | ＿＿                                             | ＿＿                                              | 未実施 |
 
 ※DELETEの「リクエストパラメータ不正」は、パス変数の予約IDの不正を指す。
 
+## JWT・管理者APIの確認項目
+
+実HTTP・Security・Service・Repository・PostgreSQLで検証する。認証・認可を検証するケースは正常なUUID・日付・本文を使用し、入力不正の400を検証するケースは有効な管理者JWTを使用する。
+
+| ID | 対象・条件 | 実行数 | 期待HTTP／結果 | DBの確認 | 結果 |
+| --- | --- | --- | --- | --- | --- |
+| AUTH-01 | 署名不正／期限切れ／issuer不一致／許容クロックスキューを超える未来のnbf | 4 | 401、ProblemDetail、Bearer challenge | 変更なし | OK |
+| AUTH-02 | ID Token／client_id不一致／sub欠落・空・空白のみ・129文字／exp欠落 | 7 | 401、ProblemDetail、Bearer challenge | 変更なし | OK |
+| AUTH-02 | subが上限128文字でPOST | 1 | 201、所有者は128文字のsub | 所有者を省略せず保存し、他予約を保持 | OK |
+| AUTH-03 | Groupなし／別Group／文字列単体のADMINS／ADMINSと数値が混在する配列 | 4 | 同じJWTで一般GETは200、管理者GETは403 | 変更なし | OK |
+| AUTH-04 | JWTなしでX-Demo-Userだけ送信してPOST | 1 | 401、仮ユーザーによる迂回不可 | 変更なし | OK |
+| AUTH-05 | 有効なAのJWTにBのX-Demo-Userを併記してPOST | 1 | 201、所有者はJWTのA | Aとして保存し、他予約を保持 | OK |
+| ADMIN-GET-01 | Mが当日D／過去日D-1を指定。対象日のA/Bの予約と別日の予約を準備 | 2 | 200、指定日の全所有者のid・seatNumber・userIdを返す。順序は検証しない | 変更なし | OK |
+| ADMIN-GET-02 | Mが予約0件の日付を取得。別日の予約あり | 1 | 200、reservationsは空配列 | 別日の予約を保持 | OK |
+| ADMIN-GET-03 | Mがdate未指定／空／不正形式／存在しない日付で取得 | 4 | 400 | 変更なし | OK |
+| ADMIN-GET-04 | Aが管理者一覧を取得 | 1 | 403、「操作権限がありません。」 | 変更なし | OK |
+| ADMIN-GET-05 | JWT未指定／空トークン／invalid-tokenで管理者一覧を取得 | 3 | 401、ProblemDetail、Bearer challenge | 変更なし | OK |
+| ADMIN-DEL-01 | Mが管理者DELETEで所有者A／Mの当日／翌日の予約を取消（2所有者×2日付） | 4 | 204、本文なし | 指定予約のみ削除し、他予約の全項目を保持 | OK |
+| ADMIN-DEL-02 | Aが管理者DELETEを呼ぶ。A自身の予約／Bの予約／対象なし | 3 | すべて403。対象なしでも404にはならない | 対象・監視用予約の全項目を保持 | OK |
+| ADMIN-DEL-03 | Mが所有者A／Mの1日前／30日前の予約を取消（2所有者×2日付） | 4 | 400、「過去の予約はキャンセルできません。」 | 対象予約を全項目保持 | OK |
+| ADMIN-DEL-04 | Mが存在しないUUID／形式不正IDを指定。別メソッドで検証 | 2 | それぞれ404／400 | 変更なし | OK |
+| ADMIN-DEL-05 | JWT未指定／空トークン／invalid-tokenで管理者DELETEを呼ぶ | 3 | 401、ProblemDetail、Bearer challenge | 対象予約を保持 | OK |
+| ADMIN-OWN-01 | Mが一般DELETEでAの当日／前日の予約を取消 | 2 | 403、所有者判定を免除しない | 対象予約を全項目保持 | OK |
+| ADMIN-OWN-02 | Mが一般APIで座席照会→予約→自身の予約取消 | 1 | 200→201→204。登録所有者はM | Mの予約登録・削除、他予約を保持 | OK |
+
+### Controllerテスト：管理者API
+
+実Security Filter・署名済みJWT・Decoderを使用し、Serviceはモック。
+
+| API | 条件 | 実行数 | 確認内容 | 結果 |
+| --- | --- | --- | --- | --- |
+| GET | GroupがADMINSのみ／USERSとADMINSを含む配列 | 2 | 200、全所有者の予約情報、指定日のService呼び出し | OK |
+| GET | 予約なし | 1 | 200、空配列 | OK |
+| GET | 日付未指定・空・形式不正・存在しない日付 | 4 | 400、Service未呼び出し | OK |
+| GET | JWT未指定・空・不正 | 3 | 401、Bearer challenge、Service未呼び出し | OK |
+| GET | 一般ユーザー | 1 | Filterの403、Service未呼び出し | OK |
+| GET | ServiceのAccessDeniedException／想定外例外 | 2 | 別ケースで403／500、ProblemDetail | OK |
+| DELETE | 正常 | 1 | cancelReservationAsAdmin(id)を呼び、204・本文なし | OK |
+| DELETE | UUID形式不正2条件 | 2 | 400、Service未呼び出し | OK |
+| DELETE | JWT未指定・空・不正 | 3 | 401、Bearer challenge、Service未呼び出し | OK |
+| DELETE | 一般ユーザー | 1 | Filterの403、Service未呼び出し | OK |
+| DELETE | Serviceの過去日・予約なし・AccessDeniedException・想定外例外 | 4 | 別ケースで400／404／403／500、ProblemDetail | OK |
+
+複数Groupの正常系はControllerテストで権限変換を検証する。Service例外のモックによる403は例外変換の確認であり、実際のメソッド認可は次節で確認する。
+
+### Serviceメソッド認可
+
+本番ServiceのSpringプロキシを直接呼び、HTTPのURL認可とは独立して`@PreAuthorize`を検証する。認証は`@WithMockUser`で設定し、Repositoryは実処理を行うSpyで呼び出しを観測する。JWT検証の代用にはしない。
+
+| ID | 操作者・操作 | 実行数 | 期待結果 | Repository・DBの確認 | 結果 |
+| --- | --- | --- | --- | --- | --- |
+| METHOD-01 | 一般ユーザーがgetAllReservations／cancelReservationAsAdminを呼ぶ | 2 | 各メソッドでAccessDeniedException | Repository未呼び出し、DB全項目を保持 | OK |
+| METHOD-01 | 管理者がgetAllReservationsを呼ぶ | 1 | 対象日の予約を取得 | 検索を実行し、DB変更なし | OK |
+| METHOD-01 | 管理者がcancelReservationAsAdminを呼ぶ | 1 | 他人の予約を取消 | 取得・DELETEを実行し、対象だけ削除。他予約を保持 | OK |
+
 ## 記入・実装ルール
 
 - 「／」で並べた入力は、別ケースまたはパラメータ化テストとして実行する。
 - エラーレスポンスは、HTTPステータスに加えて`Content-Type`、`status`、`title`、`detail`、`instance`を仕様と照合する。
+- 401は`WWW-Authenticate`のBearer challengeも確認する。Filterの401／403と、Serviceの所有者認可・メソッド認可の403を区別する。ヘッダー重複などの`invalid_request`は、不正JWTの401と同一ケースにまとめない。
 - 「DB変更なし」は、件数だけでなく既存レコードの内容が維持されることも確認する。
 - 各テストは自分で事前データを用意し、他のテストの実行結果に依存させない。
 - 同時POSTでは2件のリクエストの送信開始を同期させ、両方の完了後にレスポンスとDBを確認する。

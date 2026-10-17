@@ -6,7 +6,7 @@
 
 - 一意性：任意の日付・座席について、確定予約は最大1件。
 - 原子性：rollbackされたINSERT / DELETEの変更が残らない。
-- 所有者制約：非所有者が予約を削除できない。
+- 所有者制約：一般向けAPIでは非所有者が予約を削除できない。
 - 独立性：別日付・別座席の操作が成功し、無関係な予約を変更しない。
 - 応答と終了：競合を適切なHTTP応答に変換し、Transaction終了後に待機が解消される。
 
@@ -17,12 +17,12 @@
 | 項目 | 現行実装・確認点 |
 | --- | --- |
 | 予約登録 | `ReservationService.reserve()`が`@Transactional`。座席存在確認後に`save()`。空席の事前確認は行っていない |
-| キャンセル | `cancelReservation()`が`@Transactional`で明示DELETEの`deleteReservationById()`を実行。削除件数0は`ReservationNotFoundException`。予約取得・所有者確認・過去日確認はController側で、このTransactionの外にある |
+| キャンセル | `cancelOwnReservation()`が`@Transactional`で明示DELETEの`deleteReservationById()`を実行。削除件数0は`ReservationNotFoundException`。予約取得・所有者確認・過去日確認もServiceの同一Transaction内にある。管理者用はcancelReservationAsAdminで所有者確認だけを省略する |
 | 一意性 | Flywayで`uq_reservations_date_seat`：`UNIQUE (reservation_date, seat_number)`を定義 |
 | 例外変換 | `GlobalExceptionHandler`は`ReservationNotFoundException`を404、対象UNIQUE制約の`DataIntegrityViolationException`を409へ変換。それ以外のDB整合性エラー・想定外例外は500 |
 | 分離レベル | Serviceに明示指定なし。実接続で`SHOW transaction_isolation`を実行し、検証前提の`read committed`であることを確認する |
 | SQL発行時点 | `save()`の呼び出しだけでINSERT発行を断定しない。flush / commit時のSQL・例外を観測する |
-| ユーザー | `local`プロファイルでは`demo-user-1`と`demo-user-2`のみ許可。10種類のヘッダーを送るAPIテストは成立しない |
+| ユーザー | localを含めJWTのsubで識別する。A/Bは既存ケースを維持するテスト用subであり、許可ユーザー数の上限ではない。管理者も一般APIでは所有者判定を受ける |
 
 ## テスト構成
 
@@ -56,7 +56,7 @@ void concurrentReservationsByDifferentUsers() {
 
 - Java 25、Maven Wrapper、Dockerが利用可能な環境。既存の`ReservationApiIntegrationTest`に合わせ、Testcontainersの`postgres:17-alpine`、`local` / `test`プロファイル、Flywayを使用する。
 - テスト用`Clock.fixed(...)`を設定し、アプリケーションの日本時間の当日をDとする。DとD+1、座席1・2（マスタは1〜30）を使用する。
-- A＝`demo-user-1`、B＝`demo-user-2`。POSTは`/api/reservations`、本文は`{"date":"実日付","seatNumber":1}`、`Content-Type: application/json`、`X-Demo-User`を指定する。DELETEは`/api/reservations/{id}`。
+- A＝テストJWTの`sub=demo-user-1`、B＝`sub=demo-user-2`。POSTは`/api/reservations`、本文は`{"date":"実日付","seatNumber":1}`、`Content-Type: application/json`、`Authorization: Bearer <操作ユーザーのテスト用Access Token>`を指定する。DELETEは`/api/reservations/{id}`。
 - 各ケースの事前データは明示的にcommitする。テストメソッド全体に`@Transactional`を付けず、各操作のTransactionと検証用接続を分離する。
 - 同じDBを使うテストケースは直列実行し、ケース内部の操作だけを並列化する。各反復で初期化し、前の反復の成功データを再利用しない。
 - 対象予約とは別にD+1・座席30の予約を1件用意し、全項目が維持されることを確認する。表の「予約件数」は対象キーまたは対象ID群の件数であり、この監視用予約を含めない。
@@ -93,17 +93,19 @@ Transaction制御の図はSQLが競合する場合に適用する。C-04-HYBRID�
 
 ### A：API並列実行
 
+キャンセルの同期はService入口ではなく、所有者・過去日確認を通過した後の`ReservationRepository.deleteReservationById()`実行前に置く。C-01-API-CHECKEDは両方のDELETE到達を待つ。C-03-APIのBEFORE_COMMITはBの`findById()`が存在する予約を取得したことを確認してからAの削除を進める。JWT移行後のユーザー判定に`X-Demo-User`を使わず、検証済み認証の`sub`を参照する。
+
 1. DBの事前状態を作成・commitし、件数と内容を保存する。
 2. リクエスト数以上のWorkerを持つ`ExecutorService`を用意する。全Workerの準備完了を待ってから`CountDownLatch`または`CyclicBarrier`で送信を開始する。
 3. 全レスポンスを回収し、ステータス、本文、成功ユーザー、予約IDを記録する。勝者や完了順序は固定しない。
 4. DB最終状態と共通検証条件を照合する。自由な並列ケースとC-01-API-CHECKEDは各10回反復し、1回でも不一致ならNGとする。C-03-APIはFREEのみ10回、BEFORE_COMMIT／AFTER_COMMITは各1回。A-HELDは各1回とする。
 5. `finally`でWorker・HTTPクライアント・接続を終了し、その後に専用DBの予約データをクリーンアップする。
 
-開始時刻の同期だけではDB上の競合を保証しない。R-01-DB / R-03-DB / C-01-DBで未コミットSQLへの競合を別途確認する。C-01-API-CHECKEDではテスト専用の同期処理で両方の存在確認後・Service削除前を保留し、C-01-APIの自由な同時実行と分ける。
+開始時刻の同期だけではDB上の競合を保証しない。R-01-DB / R-03-DB / C-01-DBで未コミットSQLへの競合を別途確認する。C-01-API-CHECKEDではテスト専用の同期処理で両方のService内の検証後・RepositoryのDELETE実行前を保留し、C-01-APIの自由な同時実行と分ける。
 
 ### A-HELD：先行Transaction保留中に後続HTTPが完了することを確認
 
-1. 実ServiceプロキシのTransactionInterceptorより内側にテスト専用Adviceを追加する。既存の外側同期プロキシは維持する。
+1. 実ServiceプロキシのTransactionInterceptorより内側にテスト専用Adviceを追加する。Repository側の取消同期処理と区別する。
 2. AのHTTPを開始し、Serviceの実処理後にflushする。同じTransactionのJDBCでINSERT／DELETEが反映されたこと、有効なTransaction・read committed・DB PIDを確認してからAを保留する。Bの同じService操作は保留しない。
 3. AのSQL発行・保留通知を待ってから、別リソースへのBのHTTPを開始する。Aを解放せず、Bの成功応答を期限内に回収する。A/BのDB PIDが異なることを確認する。
 4. B完了時もAのFutureは未完了、解放ラッチは未解除、Transaction完了通知は未発生であり、`pg_stat_activity`上でAが`idle in transaction`かつTransaction IDを保持することを確認する。
@@ -167,7 +169,7 @@ SQL発行通知・Bの完了期限は各10秒、Aの保留期限・解放後の�
 | 実装用ID | パターン | 目的 | 構成・実施方法 | 期待動作 | 結果 |
 | --- | --- | --- | --- | --- | --- |
 | C-01-API | 同一予約への自由な同時DELETE | 二重キャンセルの整合性とAPI応答 | A：Aから同じ予約IDへ2件同時DELETE。開始だけを同期し、取得・削除順序は固定しない | 目標：204×1、404×1、対象0件。二重204・500は目標未達 | OK |
-| C-01-API-CHECKED | 両方の存在確認後にDELETEが競合 | 存在確認通過後の競合でも目標のAPI応答になること | A：テスト専用同期処理で両リクエストをControllerの存在・権限確認後、Service削除前まで進める。その後削除を解放し、SQL・例外を記録する | 目標：204×1、404×1、対象0件。二重204・500は目標未達 | OK |
+| C-01-API-CHECKED | 両方の存在確認後にDELETEが競合 | 存在確認通過後の競合でも目標のAPI応答になること | A：テスト専用同期処理で両リクエストをServiceの存在・所有者・過去日確認後、RepositoryのDELETE実行前まで進める。その後削除を解放し、SQL・例外を記録する | 目標：204×1、404×1、対象0件。二重204・500は目標未達 | OK |
 | C-03-API | 異なるユーザー・所有者がcommit | 非所有者の操作を拒否すること | A：パラメータ化テストで①自由な同時DELETE（FREE：10回）、②Bの行取得をAの削除確定前に制御（BEFORE_COMMIT：1回）、③Aの204後にBが取得（AFTER_COMMIT：1回）、の3条件を独立実行する | Aは204。Bは①403または404、②403、③404。対象0件、不正削除なし。3条件すべての成功でOK | OK |
 | C-05-API | 異なるユーザー・非所有者が先行 | 不正操作が正当な操作を妨げないこと | A：BのDELETEが403になった後に元予約維持を確認し、AがDELETE。自由な並列順序はC-03-APIで確認 | Bは403、その時点で元予約維持。Aは204、最終0件 | OK |
 
@@ -220,9 +222,9 @@ SQL発行通知・Bの完了期限は各10秒、Aの保留期限・解放後の�
 
 | 実装用ID | パターン | 目的 | 構成・実施方法 | 期待動作 | 結果 |
 | --- | --- | --- | --- | --- | --- |
-| T-01-SVC | 境界・分離レベルの確認 | 想定した処理単位で検証できること | S：reserve / cancelReservationを引数とするパラメータ化テスト。外側TransactionなしでServiceプロキシを呼び、内部のTransaction有効性・分離レベル・終了をテスト専用観測処理で確認。Controller側の境界はコードも照合する | reserve / cancelReservation内でTransactionが有効、`read committed`。Controller側の検証が境界外である事実を記録 | OK |
+| T-01-SVC | 境界・分離レベルの確認 | 想定した処理単位で検証できること | S：reserve / cancelOwnReservationを引数とするパラメータ化テスト。外側TransactionなしでServiceプロキシを呼び、内部のTransaction有効性・分離レベル・終了をテスト専用観測処理で確認。Controller側の境界はコードも照合する | reserve / cancelOwnReservation内でTransactionが有効、`read committed`。予約取得・所有者確認・過去日確認・削除が同じTransaction内であり、ControllerにはTransaction属性がないことを記録 | OK |
 | T-04-SVC | INSERT後のrollback | SQL発行済みの登録が取り消されること | S：TransactionTemplate内でService.reserveを呼びflush後、テスト用RuntimeExceptionを送出。例外はTransactionの外で捕捉 | 外側Transactionがrollbackし対象0件。次の独立したPOSTは201。HTTP 500の検証とは扱わない | OK |
-| T-05-SVC | DELETE後のrollback | 削除失敗で既存予約が失われないこと | S：外側Transaction内でService.cancelReservationを呼びflush後、RuntimeExceptionを送出 | 同一ID・所有者・全項目の予約が残る。次の独立したDELETEは204 | OK |
+| T-05-SVC | DELETE後のrollback | 削除失敗で既存予約が失われないこと | S：外側Transaction内でService.cancelOwnReservationを呼びflush後、RuntimeExceptionを送出 | 同一ID・所有者・全項目の予約が残る。次の独立したDELETEは204 | OK |
 | T-06-SVC-COMMIT | Transaction終了時のUNIQUE違反 | 明示flushなしでも制約違反が成功扱いにならないこと | S：外側Transaction内でServiceから重複登録し、明示flushせずTransactionを終了。例外の発生箇所・型・原因を観測する | 対象UNIQUE制約違反でrollback。既存予約は全項目維持、追加0件。早期SQL発行ならその事実を記録し、commit時の例外を再現したとは扱わない | OK |
 | T-06-SVC-FLUSH | 明示flushでのUNIQUE違反 | SQL発行時の制約違反でTransactionがrollbackすること | S：外側Transaction内でServiceから重複登録し、明示flushする。例外はTransaction外で捕捉し発生箇所を記録 | 対象UNIQUE制約違反でrollback。既存予約は全項目維持、追加0件。HTTP応答は検証しない | OK |
 
@@ -289,7 +291,7 @@ SQL発行通知・Bの完了期限は各10秒、Aの保留期限・解放後の�
 ## 共通の確認
 
 - 201：レスポンスのID・日付・座席、`Location`、成功ユーザーとDBが一致する。
-- 204：本文なし。400/403/404/409/500：API仕様のProblemDetailの`Content-Type`、`status`、`title`、`detail`、`instance`を照合する。通常の競合ケースの500はNG。
+- 204：本文なし。400/401/403/404/409/500：API仕様のProblemDetailの`Content-Type`、`status`、`title`、`detail`、`instance`を照合する。通常の競合ケースの500はNG。
 - DB：対象件数・ID・所有者・日付・座席・作成日時を確認。rollback・権限拒否では既存行の全項目が維持される。無関係な監視用予約も維持される。
 - 一意性：以下の検証SQLが0行であることを確認する。ただしUNIQUE制約そのものの存在確認、成功件数、所有者照合の代用にはしない。
 
