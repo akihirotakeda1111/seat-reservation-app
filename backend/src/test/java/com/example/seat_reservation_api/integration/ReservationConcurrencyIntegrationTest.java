@@ -1,5 +1,7 @@
 package com.example.seat_reservation_api.integration;
 
+import com.example.seat_reservation_api.support.JwtAuthenticatedTest;
+
 import com.example.seat_reservation_api.repository.ReservationRepository;
 import com.example.seat_reservation_api.service.ReservationService;
 import jakarta.persistence.EntityManager;
@@ -15,8 +17,7 @@ import java.util.concurrent.Callable;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.beans.factory.config.BeanPostProcessor;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.Arguments;
@@ -70,7 +71,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         ReservationConcurrencyIntegrationTest.IntegrationConfig.class })
 @Isolated
 @Execution(ExecutionMode.SAME_THREAD)
-public class ReservationConcurrencyIntegrationTest {
+public class ReservationConcurrencyIntegrationTest extends JwtAuthenticatedTest {
     private static final String A = "demo-user-1";
     private static final String B = "demo-user-2";
     private static final String RESERVATIONS = "/api/reservations";
@@ -95,13 +96,13 @@ public class ReservationConcurrencyIntegrationTest {
 
         @Override
         public Object postProcessAfterInitialization(Object bean, String beanName) {
-            if (!(bean instanceof ReservationService)) {
+            if (!(bean instanceof ReservationRepository)) {
                 return bean;
             }
             ProxyFactory proxy = new ProxyFactory(bean);
-            proxy.setProxyTargetClass(true);
+            proxy.setInterfaces(ReservationRepository.class);
             proxy.addAdvice((MethodInterceptor) invocation -> {
-                if (invocation.getMethod().getName().equals("cancelReservation")) {
+                if (invocation.getMethod().getName().equals("deleteReservationById")) {
                     CyclicBarrier barrier = checked;
                     if (barrier != null) {
                         barrier.await(10, TimeUnit.SECONDS);
@@ -113,11 +114,11 @@ public class ReservationConcurrencyIntegrationTest {
                 }
                 Object result = invocation.proceed();
                 CountDownLatch read = nonOwnerRead;
-                if (read != null && result != null
-                        && invocation.getMethod().getName().equals("getReservationById")
-                        && RequestContextHolder
-                                .getRequestAttributes() instanceof ServletRequestAttributes attrs
-                        && B.equals(attrs.getRequest().getHeader("X-Demo-User"))) {
+                if (read != null && result instanceof java.util.Optional<?> reservation
+                        && reservation.isPresent()
+                        && invocation.getMethod().getName().equals("findById")
+                        && SecurityContextHolder.getContext().getAuthentication() != null
+                        && B.equals(SecurityContextHolder.getContext().getAuthentication().getName())) {
                     read.countDown();
                 }
                 return result;
@@ -488,7 +489,7 @@ public class ReservationConcurrencyIntegrationTest {
                     .filter(row -> !second.equals(row.get("id"))).toList();
 
             // 制御付き操作：AのDELETEを保留し、Bの204とcommit済みのDB状態を先に確認する。
-            runWhileFirstHeld("cancelReservation",
+            runWhileFirstHeld("cancelOwnReservation",
                     () -> httpSupport.delete(first.toString(), A),
                     () -> httpSupport.delete(second.toString(), B),
                     response -> {
@@ -525,7 +526,7 @@ public class ReservationConcurrencyIntegrationTest {
             Callable<HttpResponse<String>> secondCall, Consumer<HttpResponse<String>> whileHeld,
             Consumer<HttpResponse<String>> afterRelease, TestReporter reporter) throws Exception {
         // 準備：実Transactionの内側へ観測Adviceを追加できるプロキシを探す。
-        // CancellationSynchronizationの外側プロキシを辿り、実Transactionの内側へ追加する。
+        // Serviceのプロキシを辿り、実Transactionの内側へ追加する。
         Advised transactional = (Advised) service;
         while (List.of(transactional.getAdvisors()).stream()
                 .noneMatch(advisor -> advisor.getAdvice() instanceof TransactionInterceptor)) {
@@ -551,8 +552,7 @@ public class ReservationConcurrencyIntegrationTest {
             assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isTrue();
             assertThat(jdbc.queryForObject("show transaction_isolation", String.class))
                     .isEqualTo("read committed");
-            var attrs = (ServletRequestAttributes) RequestContextHolder.currentRequestAttributes();
-            String user = attrs.getRequest().getHeader("X-Demo-User");
+            String user = SecurityContextHolder.getContext().getAuthentication().getName();
             int pid = jdbc.queryForObject("select pg_backend_pid()", Integer.class);
 
             // 後続B：接続PIDだけ記録し、保留せず実処理を進める。
@@ -710,7 +710,8 @@ public class ReservationConcurrencyIntegrationTest {
             TestReporter reporter) {
         reporter.publishEntry("independentResponses", responses.stream()
                 .map(response -> response.request().method() + " " + response.uri() + " user="
-                        + response.request().headers().firstValue("X-Demo-User").orElseThrow()
+                        + jwtDecoder.decode(response.request().headers().firstValue("Authorization")
+                                .orElseThrow().substring("Bearer ".length())).getSubject()
                         + " status=" + response.statusCode() + " " + response.body())
                 .collect(java.util.stream.Collectors.joining("\n")));
     }

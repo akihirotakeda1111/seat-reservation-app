@@ -92,18 +92,8 @@ public class ReservationController {
     public ResponseEntity<String> deleteReservation(@PathVariable @NotNull UUID id) {
 
         String userId = currentUserProvider.getUserId();
-        Reservation reservation = reservationService.getReservationById(id);
-        if (reservation == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "指定された予約が見つかりません。");
-        }
-        if (!reservation.getUserId().equals(userId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "指定された予約はキャンセルできません。");
-        }
-        if (Validation.isInvalidDate(reservation.getReservationDate(), clock)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "過去の予約はキャンセルできません。");
-        }
 
-        reservationService.cancelReservation(reservation.getId());
+        reservationService.cancelOwnReservation(id, userId);
 
         return ResponseEntity.noContent().build();
     }

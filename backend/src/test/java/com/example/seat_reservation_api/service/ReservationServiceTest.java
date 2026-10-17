@@ -4,10 +4,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.example.seat_reservation_api.repository.ReservationRepository;
@@ -18,6 +23,9 @@ import com.example.seat_reservation_api.exception.InvalidSeatException;
 import com.example.seat_reservation_api.exception.ReservationNotFoundException;
 import java.util.Optional;
 import java.time.LocalDate;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.UUID;
 import java.util.List;
 
@@ -33,6 +41,10 @@ class ReservationServiceTest {
 
     @Mock
     SeatRepository seatRepository;
+
+    @Spy
+    Clock clock = Clock.fixed(Instant.parse("2026-10-09T15:30:00Z"),
+            ZoneId.of("Asia/Tokyo"));
 
     @InjectMocks
     ReservationService service;
@@ -129,25 +141,125 @@ class ReservationServiceTest {
     @Nested
     @DisplayName("キャンセル")
     class CancelReserveTest {
-        @Test
-        void cancelReservation_指定IDの予約を削除する() {
+        @ParameterizedTest(name = "基準日から{0}日後の自分の予約を削除する")
+        @ValueSource(ints = {0, 1})
+        void 当日と翌日の予約を削除する(int offsetDays) {
             UUID id = UUID.randomUUID();
+            String userId = "demo-user-1";
+            Reservation reservation = mock(Reservation.class);
+            when(reservation.getId()).thenReturn(id);
+            when(reservation.getUserId()).thenReturn(userId);
+            LocalDate date = LocalDate.now(clock).plusDays(offsetDays);
+            when(reservation.getReservationDate()).thenReturn(date);
+            when(reservationRepository.findById(id)).thenReturn(Optional.of(reservation));
             when(reservationRepository.deleteReservationById(id)).thenReturn(1);
 
-            service.cancelReservation(id);
+            service.cancelOwnReservation(id, userId);
 
-            verify(reservationRepository).deleteReservationById(id);
+            var order = inOrder(reservationRepository);
+            order.verify(reservationRepository).findById(id);
+            order.verify(reservationRepository).deleteReservationById(id);
+            verifyNoMoreInteractions(reservationRepository);
+        }
+
+        @ParameterizedTest(name = "{0}日前の予約は400でDELETEを呼ばない")
+        @ValueSource(ints = {1, 30})
+        void 過去日の予約は削除しない(int daysAgo) {
+            UUID id = UUID.randomUUID();
+            String userId = "demo-user-1";
+            Reservation reservation = new Reservation(
+                    LocalDate.now(clock).minusDays(daysAgo), (short) 1, userId);
+            when(reservationRepository.findById(id)).thenReturn(Optional.of(reservation));
+
+            assertThatThrownBy(() -> service.cancelOwnReservation(id, userId))
+                    .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
+                        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+                        assertThat(exception.getReason()).isEqualTo("過去の予約はキャンセルできません。");
+                    });
+
+            verify(reservationRepository).findById(id);
+            verify(reservationRepository, never()).deleteReservationById(any());
+            verifyNoMoreInteractions(reservationRepository);
         }
 
         @Test
-        void cancelReservation_削除対象がなければ予約なしの例外を返す() {
+        void 他人の予約は削除しない() {
             UUID id = UUID.randomUUID();
-            when(reservationRepository.deleteReservationById(id)).thenReturn(0);
+            Reservation reservation = new Reservation(
+                    LocalDate.now(clock).plusDays(1), (short) 1, "demo-user-1");
+            when(reservationRepository.findById(id)).thenReturn(Optional.of(reservation));
 
-            assertThatThrownBy(() -> service.cancelReservation(id))
+            assertThatThrownBy(() -> service.cancelOwnReservation(id, "demo-user-2"))
+                    .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
+                        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+                        assertThat(exception.getReason()).isEqualTo("指定された予約はキャンセルできません。");
+                    });
+
+            verify(reservationRepository).findById(id);
+            verify(reservationRepository, never()).deleteReservationById(any());
+            verifyNoMoreInteractions(reservationRepository);
+        }
+
+        @Test
+        void 取得時に予約が存在しなければ削除しない() {
+            UUID id = UUID.randomUUID();
+            when(reservationRepository.findById(id)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.cancelOwnReservation(id, "demo-user-1"))
                     .isInstanceOf(ReservationNotFoundException.class);
 
+            verify(reservationRepository).findById(id);
+            verify(reservationRepository, never()).deleteReservationById(any());
+            verifyNoMoreInteractions(reservationRepository);
+        }
+
+        @Test
+        void 取得後に削除対象がなくなれば予約なしの例外を返す() {
+            UUID id = UUID.randomUUID();
+            String userId = "demo-user-1";
+            Reservation reservation = mock(Reservation.class);
+            when(reservation.getId()).thenReturn(id);
+            when(reservation.getUserId()).thenReturn(userId);
+            LocalDate date = LocalDate.now(clock);
+            when(reservation.getReservationDate()).thenReturn(date);
+            when(reservationRepository.findById(id)).thenReturn(Optional.of(reservation));
+            when(reservationRepository.deleteReservationById(id)).thenReturn(0);
+
+            assertThatThrownBy(() -> service.cancelOwnReservation(id, userId))
+                    .isInstanceOf(ReservationNotFoundException.class);
+
+            verify(reservationRepository).findById(id);
             verify(reservationRepository).deleteReservationById(id);
+        }
+
+        @ParameterizedTest(name = "{0}の例外を伝播する")
+        @ValueSource(strings = {"予約照会時", "予約削除時"})
+        void 想定外の例外を発生箇所ごとに伝播する(String failurePoint) {
+            UUID id = UUID.randomUUID();
+            String userId = "demo-user-1";
+            RuntimeException failure = new RuntimeException("内部システムエラー");
+            boolean lookupFails = "予約照会時".equals(failurePoint);
+            if (lookupFails) {
+                when(reservationRepository.findById(id)).thenThrow(failure);
+            } else {
+                Reservation reservation = mock(Reservation.class);
+                when(reservation.getId()).thenReturn(id);
+                when(reservation.getUserId()).thenReturn(userId);
+                LocalDate date = LocalDate.now(clock);
+                when(reservation.getReservationDate()).thenReturn(date);
+                when(reservationRepository.findById(id)).thenReturn(Optional.of(reservation));
+                when(reservationRepository.deleteReservationById(id)).thenThrow(failure);
+            }
+
+            assertThatThrownBy(() -> service.cancelOwnReservation(id, userId)).isSameAs(failure);
+
+            verify(reservationRepository).findById(id);
+            if (lookupFails) {
+                verify(reservationRepository, never()).deleteReservationById(any());
+            } else {
+                verify(reservationRepository).deleteReservationById(id);
+            }
+            verifyNoMoreInteractions(reservationRepository);
         }
     }
 }

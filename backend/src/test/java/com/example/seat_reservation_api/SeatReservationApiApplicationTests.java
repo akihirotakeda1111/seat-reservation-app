@@ -1,5 +1,7 @@
 package com.example.seat_reservation_api;
 
+import com.example.seat_reservation_api.support.JwtAuthenticatedTest;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -11,7 +13,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @SpringBootTest
 @Testcontainers
 @ActiveProfiles("local")
-class SeatReservationApiApplicationTests {
+class SeatReservationApiApplicationTests extends JwtAuthenticatedTest {
 
 	@Container
 	@ServiceConnection

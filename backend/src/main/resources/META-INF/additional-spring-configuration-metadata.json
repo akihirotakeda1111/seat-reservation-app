@@ -1,0 +1,9 @@
+{
+  "properties": [
+    {
+      "name": "app.security.cognito-client-id",
+      "type": "java.lang.String",
+      "description": "Cognito Access Tokenのclient_id"
+    }
+  ]
+}

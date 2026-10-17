@@ -1,6 +1,11 @@
 package com.example.seat_reservation_api.controller;
 
-import com.example.seat_reservation_api.component.DemoCurrentUserProvider;
+import com.example.seat_reservation_api.support.JwtAuthenticatedTest;
+import com.example.seat_reservation_api.support.TestJwtSupport;
+
+import com.example.seat_reservation_api.component.JwtCurrentUserProvider;
+import com.example.seat_reservation_api.config.SecurityConfig;
+import com.example.seat_reservation_api.config.SecurityErrorConfig;
 import com.example.seat_reservation_api.config.ValidationConfig;
 import com.example.seat_reservation_api.entity.Reservation;
 import com.example.seat_reservation_api.exception.GlobalExceptionHandler;
@@ -24,15 +29,19 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -47,9 +56,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(ReservationController.class)
 @ActiveProfiles("local")
-@Import({GlobalExceptionHandler.class, SeatCacheControlFilter.class, DemoCurrentUserProvider.class,
-                ValidationConfig.class, ReservationControllerTest.FixedClockConfig.class})
-class ReservationControllerTest {
+@Import({ GlobalExceptionHandler.class, SeatCacheControlFilter.class, JwtCurrentUserProvider.class,
+                SecurityConfig.class, SecurityErrorConfig.class,
+                ValidationConfig.class, ReservationControllerTest.FixedClockConfig.class })
+class ReservationControllerTest extends JwtAuthenticatedTest {
 
         @Autowired
         MockMvc mockMvc;
@@ -64,6 +74,7 @@ class ReservationControllerTest {
                         Clock.fixed(Instant.parse("2026-10-09T15:30:00Z"), ZoneId.of("Asia/Tokyo"));
 
         @TestConfiguration(proxyBeanMethods = false)
+        @EnableWebSecurity
         static class FixedClockConfig {
 
                 @Bean
@@ -158,9 +169,21 @@ class ReservationControllerTest {
                         return Stream.of(Arguments.of("日付未指定", null, "demo-user-1"),
                                         Arguments.of("日付が空", "", "demo-user-1"),
                                         Arguments.of("日付の形式不正", "invalid-date", "demo-user-1"),
-                                        Arguments.of("存在しない日付", "2026-02-30", "demo-user-1"),
-                                        Arguments.of("ユーザーヘッダー未指定", "2026-10-10", null),
-                                        Arguments.of("ユーザーヘッダー不正", "2026-10-10", "invalid-user"));
+                                        Arguments.of("存在しない日付", "2026-02-30", "demo-user-1"));
+                }
+
+                @ParameterizedTest
+                @NullSource
+                @ValueSource(strings = "invalid-token")
+                void 認証不正なら401(String token) throws Exception {
+                        mockMvc.perform(withToken(get(SEATS_PATH).param("date", "2026-10-10"), token))
+                                        .andExpect(header().string("Cache-Control", "no-store"))
+                                        .andExpect(header().string("WWW-Authenticate",
+                                                        org.hamcrest.Matchers.startsWith("Bearer")))
+                                        .andExpectAll(problem(HttpStatus.UNAUTHORIZED,
+                                                        "認証が必要です。", SEATS_PATH));
+
+                        verifyNoInteractions(service);
                 }
 
                 @Test
@@ -241,11 +264,7 @@ class ReservationControllerTest {
                         LocalDate pastDate = LocalDate.now(FIXED_CLOCK).minusDays(1);
                         String validUser = "demo-user-1";
 
-                        String validBody = reservationBody(futureDate, 1);
-
-                        return Stream.of(Arguments.of("ユーザーヘッダー未指定", validBody, null),
-                                        Arguments.of("ユーザーヘッダー不正", validBody, "invalid-user"),
-                                        Arguments.of("本文未指定", "", validUser),
+                        return Stream.of(Arguments.of("本文未指定", "", validUser),
                                         Arguments.of("JSON構文不正", "{", validUser),
                                         Arguments.of("日付未指定", """
                                                         {"seatNumber": 1}
@@ -289,6 +308,21 @@ class ReservationControllerTest {
 
                         verify(service).reserve(date, userId, seatNumber);
                         verify(service, never()).getReservationById(any());
+                }
+
+                @ParameterizedTest
+                @NullSource
+                @ValueSource(strings = "invalid-token")
+                void 認証不正なら401(String token) throws Exception {
+                        String body = reservationBody(LocalDate.now(FIXED_CLOCK).plusDays(1), 1);
+                        mockMvc.perform(withToken(post(RESERVATIONS_PATH)
+                                        .contentType(MediaType.APPLICATION_JSON).content(body), token))
+                                        .andExpect(header().string("WWW-Authenticate",
+                                                        org.hamcrest.Matchers.startsWith("Bearer")))
+                                        .andExpectAll(problem(HttpStatus.UNAUTHORIZED,
+                                                        "認証が必要です。", RESERVATIONS_PATH));
+
+                        verifyNoInteractions(service);
                 }
 
                 @ParameterizedTest(name = "予約済みなら409：userId={0}")
@@ -368,23 +402,16 @@ class ReservationControllerTest {
         @Nested
         @DisplayName("キャンセル")
         class DeleteReservationTests {
-                @ParameterizedTest(name = "基準日から{0}日後の予約はキャンセル可能")
-                @ValueSource(ints = {0, 1})
-                void 正常な場合(int offsetDays) throws Exception {
+                @Test
+                void 正常な場合() throws Exception {
                         UUID id = UUID.randomUUID();
                         String userId = "demo-user-1";
-                        LocalDate date = LocalDate.now(FIXED_CLOCK).plusDays(offsetDays);
-
-                        Reservation reservation = reservationForCancellation(userId, date);
-                        when(reservation.getId()).thenReturn(id);
-                        when(service.getReservationById(id)).thenReturn(reservation);
 
                         mockMvc.perform(deleteReservationRequest(id.toString(), userId))
                                         .andExpect(status().isNoContent())
                                         .andExpect(content().string(""));
 
-                        verify(service).getReservationById(id);
-                        verify(service).cancelReservation(id);
+                        verify(service).cancelOwnReservation(id, userId);
                 }
 
                 @ParameterizedTest(name = "{0}")
@@ -393,135 +420,96 @@ class ReservationControllerTest {
                                 throws Exception {
                         mockMvc.perform(deleteReservationRequest(reservationId, userId))
                                         .andExpectAll(problem(HttpStatus.BAD_REQUEST,
-                                                        "リクエストの内容が不正です。",
-                                                        reservationPath(reservationId)));
+                                                        "リクエストの内容が不正です。", reservationPath(reservationId)));
 
                         verifyNoInteractions(service);
                 }
 
                 static Stream<Arguments> invalidDeleteReservationCases() {
-                        String validId = "550e8400-e29b-41d4-a716-446655440000";
                         String validUser = "demo-user-1";
 
                         return Stream.of(Arguments.of("予約IDがUUID形式ではない", "invalid-uuid", validUser),
                                         Arguments.of("予約IDに16進数以外の文字を含む",
                                                         "550e8400-e29b-41d4-a716-44665544000g",
-                                                        validUser),
-                                        Arguments.of("ユーザーヘッダー未指定", validId, null),
-                                        Arguments.of("ユーザーヘッダーが空", validId, ""),
-                                        Arguments.of("ユーザーヘッダー不正", validId, "invalid-user"));
+                                                        validUser));
                 }
 
-                @ParameterizedTest(name = "{0}日前の予約はキャンセル不可")
-                @ValueSource(ints = {1, 30})
-                void 過去日の予約なら400(int daysAgo) throws Exception {
+                @ParameterizedTest
+                @NullAndEmptySource
+                @ValueSource(strings = "invalid-token")
+                void 認証不正なら401(String token) throws Exception {
+                        String path = reservationPath("550e8400-e29b-41d4-a716-446655440000");
+                        mockMvc.perform(withToken(delete(path), token))
+                                        .andExpect(header().string("WWW-Authenticate",
+                                                        org.hamcrest.Matchers.startsWith("Bearer")))
+                                        .andExpectAll(problem(HttpStatus.UNAUTHORIZED,
+                                                        "認証が必要です。", path));
+
+                        verifyNoInteractions(service);
+                }
+
+                @Test
+                void 過去日エラーなら400() throws Exception {
                         UUID id = UUID.randomUUID();
                         String userId = "demo-user-1";
-                        LocalDate date = LocalDate.now(FIXED_CLOCK).minusDays(daysAgo);
-
-                        Reservation reservation = reservationForCancellation(userId, date);
-                        when(service.getReservationById(id)).thenReturn(reservation);
+                        doThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                        "過去の予約はキャンセルできません。"))
+                                        .when(service).cancelOwnReservation(id, userId);
 
                         mockMvc.perform(deleteReservationRequest(id.toString(), userId))
                                         .andExpectAll(problem(HttpStatus.BAD_REQUEST,
                                                         "過去の予約はキャンセルできません。",
                                                         reservationPath(id.toString())));
 
-                        verify(service).getReservationById(id);
-                        verify(service, never()).cancelReservation(any());
+                        verify(service).cancelOwnReservation(id, userId);
                 }
 
                 @Test
-                void 他人の予約なら403() throws Exception {
+                void 所有者エラーなら403() throws Exception {
                         UUID id = UUID.randomUUID();
-                        LocalDate date = LocalDate.now(FIXED_CLOCK).plusDays(1);
-                        Short seatNumber = 1;
-                        String userId = "demo-user-1";
                         String otherUserId = "demo-user-2";
 
-                        Reservation reservation = new Reservation(date, seatNumber, userId);
-                        when(service.getReservationById(id)).thenReturn(reservation);
+                        doThrow(new ResponseStatusException(HttpStatus.FORBIDDEN,
+                                        "指定された予約はキャンセルできません。"))
+                                        .when(service).cancelOwnReservation(id, otherUserId);
 
                         mockMvc.perform(deleteReservationRequest(id.toString(), otherUserId))
                                         .andExpectAll(problem(HttpStatus.FORBIDDEN,
                                                         "指定された予約はキャンセルできません。",
                                                         reservationPath(id.toString())));
 
-                        verify(service, never()).cancelReservation(any());
+                        verify(service).cancelOwnReservation(id, otherUserId);
                 }
 
                 @Test
-                void 予約が存在しないなら404() throws Exception {
+                void 予約なしエラーなら404() throws Exception {
                         UUID id = UUID.randomUUID();
                         String userId = "demo-user-1";
 
-                        when(service.getReservationById(id)).thenReturn(null);
+                        doThrow(new ReservationNotFoundException())
+                                        .when(service).cancelOwnReservation(id, userId);
 
                         mockMvc.perform(deleteReservationRequest(id.toString(), userId))
                                         .andExpectAll(problem(HttpStatus.NOT_FOUND,
                                                         "指定された予約が見つかりません。",
                                                         reservationPath(id.toString())));
 
-                        verify(service).getReservationById(id);
-                        verify(service, never()).cancelReservation(any());
+                        verify(service).cancelOwnReservation(id, userId);
                 }
 
                 @Test
-                void 確認後に予約が削除されていたら404() throws Exception {
-                        UUID id = UUID.randomUUID();
-                        String userId = "demo-user-1";
-                        Reservation reservation = reservationForCancellation(userId,
-                                        LocalDate.now(FIXED_CLOCK));
-                        when(reservation.getId()).thenReturn(id);
-                        when(service.getReservationById(id)).thenReturn(reservation);
-                        doThrow(new ReservationNotFoundException()).when(service).cancelReservation(id);
-
-                        mockMvc.perform(deleteReservationRequest(id.toString(), userId))
-                                        .andExpectAll(problem(HttpStatus.NOT_FOUND,
-                                                        "指定された予約が見つかりません。",
-                                                        reservationPath(id.toString())));
-                        verify(service).cancelReservation(id);
-                }
-
-                @ParameterizedTest(name = "{0}")
-                @ValueSource(strings = {"予約照会時", "予約削除時"})
-                void 想定外の例外なら500(String failurePoint) throws Exception {
+                void 想定外の例外なら500() throws Exception {
                         UUID id = UUID.randomUUID();
                         String userId = "demo-user-1";
                         var exception = new RuntimeException("内部システムエラー");
-
-                        boolean lookupFails = "予約照会時".equals(failurePoint);
-
-                        if (lookupFails) {
-                                when(service.getReservationById(id)).thenThrow(exception);
-                        } else {
-                                Reservation reservation = reservationForCancellation(userId,
-                                                LocalDate.now(FIXED_CLOCK));
-                                when(reservation.getId()).thenReturn(id);
-                                when(service.getReservationById(id)).thenReturn(reservation);
-
-                                doThrow(exception).when(service).cancelReservation(id);
-                        }
+                        doThrow(exception).when(service).cancelOwnReservation(id, userId);
 
                         mockMvc.perform(deleteReservationRequest(id.toString(), userId))
                                         .andExpectAll(problem(HttpStatus.INTERNAL_SERVER_ERROR,
                                                         "システムエラーが発生しました。",
                                                         reservationPath(id.toString())));
 
-                        verify(service).getReservationById(id);
-
-                        if (lookupFails) {
-                                verify(service, never()).cancelReservation(any());
-                        } else {
-                                verify(service).cancelReservation(id);
-                        }
-                }
-
-                private Reservation reservationForCancellation(String userId, LocalDate date) {
-                        Reservation reservation = mock(Reservation.class);
-                        when(reservation.getUserId()).thenReturn(userId);
-                        when(reservation.getReservationDate()).thenReturn(date);
-                        return reservation;
+                        verify(service).cancelOwnReservation(id, userId);
                 }
         }
 
@@ -550,8 +538,13 @@ class ReservationControllerTest {
 
         private static MockHttpServletRequestBuilder withUser(MockHttpServletRequestBuilder request,
                         String userId) {
-                if (userId != null) {
-                        request.header("X-Demo-User", userId);
+                return withToken(request, TestJwtSupport.userToken(userId));
+        }
+
+        private static MockHttpServletRequestBuilder withToken(MockHttpServletRequestBuilder request,
+                        String token) {
+                if (token != null) {
+                        request.header("Authorization", "Bearer " + token);
                 }
                 return request;
         }

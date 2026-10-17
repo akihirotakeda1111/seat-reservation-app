@@ -1,5 +1,7 @@
 package com.example.seat_reservation_api.integration;
 
+import com.example.seat_reservation_api.support.JwtAuthenticatedTest;
+
 import com.example.seat_reservation_api.controller.ReservationController;
 import com.example.seat_reservation_api.repository.ReservationRepository;
 import com.example.seat_reservation_api.service.ReservationService;
@@ -64,7 +66,7 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 @Import(ReservationIntegrationTestConfig.class)
 @Isolated
 @Execution(ExecutionMode.SAME_THREAD)
-public class ReservationTransactionIntegrationTest {
+public class ReservationTransactionIntegrationTest extends JwtAuthenticatedTest {
     private static final String A = "demo-user-1";
     private static final String B = "demo-user-2";
     private static final String RESERVATIONS = "/api/reservations";
@@ -129,11 +131,11 @@ public class ReservationTransactionIntegrationTest {
     @DisplayName("Transaction境界・正常終了・例外")
     class TransactionOutcomeTests {
         @ParameterizedTest(name = "{displayName} [{0}]")
-        @ValueSource(strings = { "reserve", "cancelReservation" })
+        @ValueSource(strings = { "reserve", "cancelOwnReservation" })
         @DisplayName("T-01-SVC: 境界・分離レベルの確認")
         void serviceOwnsTransaction(String operation, TestReporter reporter) throws Exception {
             // 準備：取消の場合だけ対象予約を用意し、観測回数・完了状態を初期化する。
-            UUID existing = operation.equals("cancelReservation") ? support.save(D, 1, A) : null;
+            UUID existing = operation.equals("cancelOwnReservation") ? support.save(D, 1, A) : null;
             AtomicInteger observed = new AtomicInteger();
             AtomicInteger completion = new AtomicInteger(-1);
             Advised proxy = (Advised) service;
@@ -172,7 +174,7 @@ public class ReservationTransactionIntegrationTest {
                 if (operation.equals("reserve")) {
                     created = service.reserve(D, A, (short) 1);
                 } else {
-                    service.cancelReservation(existing);
+                    service.cancelOwnReservation(existing, A);
                 }
             } finally {
                 // 後処理：Service呼び出しの成否によらずAdviceを除去する。
@@ -199,7 +201,7 @@ public class ReservationTransactionIntegrationTest {
                     ReservationService.class.getMethod("getReservationById", UUID.class),
                     ReservationService.class)).isNull();
             reporter.publishEntry("boundary",
-                    "Controller existence/ownership/date checks precede the transactional cancelReservation call; isolation=read committed; completion=COMMITTED");
+                    "Service existence/ownership/date checks and deletion run inside cancelOwnReservation; isolation=read committed; completion=COMMITTED");
         }
 
         @Test
@@ -240,7 +242,7 @@ public class ReservationTransactionIntegrationTest {
 
             // 操作：外側Transactionで削除後、DBから行が消えたことを確認して例外を送出する。
             Throwable thrown = catchThrowable(() -> transactions.executeWithoutResult(status -> {
-                service.cancelReservation(id);
+                service.cancelOwnReservation(id, A);
 
                 // 明示DELETEはService内で発行済み。flush後も同一Transactionの削除状態を確認する。
                 entityManager.flush();

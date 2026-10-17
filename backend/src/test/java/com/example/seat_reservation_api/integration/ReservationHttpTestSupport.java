@@ -7,10 +7,12 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.UUID;
+import java.util.Map;
 import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatus;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import com.example.seat_reservation_api.support.TestJwtSupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -48,18 +50,30 @@ final class ReservationHttpTestSupport {
 
     HttpResponse<String> request(String method, String path, String user, String body)
             throws Exception {
+        return requestWithToken(method, path,
+                user == null ? null : TestJwtSupport.userToken(user), body);
+    }
+
+    HttpResponse<String> requestWithToken(String method, String path, String token, String body)
+            throws Exception {
+        return requestWithToken(method, path, token, body, Map.of());
+    }
+
+    HttpResponse<String> requestWithToken(String method, String path, String token, String body,
+            Map<String, String> extraHeaders) throws Exception {
         // 接続準備：テストアプリのポートとパスを使い、リクエストの期限を30秒に設定する。
         HttpRequest.Builder builder =
                 HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
                         .timeout(Duration.ofSeconds(30));
 
-        // ヘッダー設定：nullのユーザーはヘッダーを省略し、本文がある場合だけJSONを指定する。
-        if (user != null) {
-            builder.header("X-Demo-User", user);
+        // ヘッダー設定：nullは認証ヘッダーなし、空文字はBearerトークンなしの要求にする。
+        if (token != null) {
+            builder.header("Authorization", "Bearer " + token);
         }
         if (body != null) {
             builder.header("Content-Type", "application/json");
         }
+        extraHeaders.forEach(builder::header);
 
         // 送信・受信：HTTPメソッドと本文を指定して同期送信し、応答本文を文字列で受け取る。
         return client.send(
@@ -83,6 +97,10 @@ final class ReservationHttpTestSupport {
     }
 
     void assertProblem(HttpResponse<String> response, int status, String path, String detail) {
+        if (status == 401) {
+            assertThat(response.headers().firstValue("WWW-Authenticate").orElseThrow())
+                    .startsWith("Bearer");
+        }
         // 共通契約：指定ステータスとProblemDetailのメディアタイプを確認する。
         JsonNode root = json(response, status, MediaType.APPLICATION_PROBLEM_JSON);
 

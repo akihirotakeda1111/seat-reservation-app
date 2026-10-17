@@ -1,5 +1,7 @@
 package com.example.seat_reservation_api.integration;
 
+import com.example.seat_reservation_api.support.JwtAuthenticatedTest;
+
 import com.example.seat_reservation_api.repository.ReservationRepository;
 import java.net.http.HttpClient;
 import java.net.http.HttpResponse;
@@ -43,7 +45,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Import(ReservationIntegrationTestConfig.class)
 @Isolated
 @Execution(ExecutionMode.SAME_THREAD)
-class ReservationApiIntegrationTest {
+class ReservationApiIntegrationTest extends JwtAuthenticatedTest {
 
     private static final String A = "demo-user-1";
     private static final String B = "demo-user-2";
@@ -148,15 +150,15 @@ class ReservationApiIntegrationTest {
 
         @ParameterizedTest
         @NullAndEmptySource
-        @ValueSource(strings = "invalid-user")
-        @DisplayName("GET-05: ユーザーヘッダー不正")
+        @ValueSource(strings = "invalid-token")
+        @DisplayName("GET-05: Bearerトークン欠落・不正")
         void invalidGetHeader(String user) throws Exception {
             // 準備：ヘッダー不正の照会前にDB状態を保存する。
             List<Map<String, Object>> before = support.snapshot();
 
-            // 操作・応答確認：ユーザーの未指定・空文字・未許可値が400となることを確認する。
-            httpSupport.assertProblem(getSeats(D.toString(), user), 400, "/api/seats",
-                    "リクエストの内容が不正です。");
+            // 操作・応答確認：認証失敗は業務処理より前に401となり、Bearer challengeが返る。
+            httpSupport.assertProblem(httpSupport.requestWithToken("GET",
+                    "/api/seats?date=" + D, user, null), 401, "/api/seats", "認証が必要です。");
 
             // DB確認：リクエスト拒否後も予約が変更されない。
             assertThat(support.snapshot()).isEqualTo(before);
@@ -261,11 +263,18 @@ class ReservationApiIntegrationTest {
 
         @ParameterizedTest
         @NullAndEmptySource
-        @ValueSource(strings = "invalid-user")
-        @DisplayName("POST-09: ユーザーヘッダー不正")
+        @ValueSource(strings = "invalid-token")
+        @DisplayName("POST-09: Bearerトークン欠落・不正")
         void invalidPostHeader(String user) throws Exception {
-            // 共通処理：ユーザーの未指定・空文字・未許可値で予約し、400とDB変更なしを確認する。
-            assertRejectedPost(httpSupport.body(D, 1), user);
+            // 準備：ヘッダー不正の照会前にDB状態を保存する。
+            List<Map<String, Object>> before = support.snapshot();
+
+            // 操作・応答確認：認証失敗は業務処理より前に401となり、Bearer challengeが返る。
+            httpSupport.assertProblem(httpSupport.requestWithToken("POST", RESERVATIONS,
+                    user, httpSupport.body(D, 1)), 401, RESERVATIONS, "認証が必要です。");
+
+            // DB確認：リクエスト拒否後も予約が変更されない。
+            assertThat(support.snapshot()).isEqualTo(before);
         }
 
         @Test
@@ -343,15 +352,22 @@ class ReservationApiIntegrationTest {
 
         @ParameterizedTest
         @NullAndEmptySource
-        @ValueSource(strings = "invalid-user")
-        @DisplayName("DEL-06: ユーザーヘッダー不正")
+        @ValueSource(strings = "invalid-token")
+        @DisplayName("DEL-06: Bearerトークン欠落・不正")
         void invalidDeleteHeader(String user) throws Exception {
             // 準備：取消対象となるAの予約を用意する。
             UUID target = support.save(D, 1, A);
 
-            // 操作・検証：ユーザーの未指定・空文字・未許可値が400となり、予約が維持される。
-            assertRejectedDelete(target.toString(), user, 400,
-                    "リクエストの内容が不正です。");
+            // 準備：ヘッダー不正の照会前にDB状態を保存する。
+            List<Map<String, Object>> before = support.snapshot();
+
+            // 操作・応答確認：認証失敗は業務処理より前に401となり、Bearer challengeが返る。
+            String path = RESERVATIONS + "/" + target;
+            httpSupport.assertProblem(httpSupport.requestWithToken("DELETE", path, user, null),
+                    401, path, "認証が必要です。");
+            
+            // DB確認：リクエスト拒否後も予約が変更されない。
+            assertThat(support.snapshot()).isEqualTo(before);
         }
 
         @Test
@@ -382,7 +398,7 @@ class ReservationApiIntegrationTest {
         }
     }
 
-
+    
     private HttpResponse<String> getSeats(String date, String user) throws Exception {
         HttpResponse<String> response = httpSupport.request("GET", "/api/seats?date=" + date, user, null);
         assertThat(response.headers().firstValue("Cache-Control")).contains("no-store");
