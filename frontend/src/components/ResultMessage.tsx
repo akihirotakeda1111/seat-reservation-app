@@ -33,7 +33,7 @@ export function ResultMessage({
           <span>{fetchErrorText}</span>
           <button
             type="button"
-            className="retry"
+            className="button button-secondary"
             onClick={onRetry}
             disabled={loading}
           >

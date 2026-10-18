@@ -22,9 +22,13 @@ export function AdminReservationPage({
         <h1>
           <small className="admin-badge">管理者</small> 予約管理
         </h1>
-        <div className="admin-actions">
-          <button onClick={onReservations}>予約画面へ</button>
-          <button onClick={onLogout}>ログアウト</button>
+        <div className="header-actions">
+          <button className="button button-secondary" onClick={onReservations}>
+            予約画面へ
+          </button>
+          <button className="button button-danger" onClick={onLogout}>
+            ログアウト
+          </button>
         </div>
       </header>
       <main>

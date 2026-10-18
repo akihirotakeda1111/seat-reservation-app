@@ -7,7 +7,7 @@ interface Props {
 export function ReservationFilters({ date, disabled, onDateChange }: Props) {
   return (
     <div className="filter-fields">
-      <label>
+      <label className="date-field">
         利用日
         <input
           type="date"

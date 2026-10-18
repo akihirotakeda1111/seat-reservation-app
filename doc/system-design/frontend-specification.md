@@ -10,7 +10,7 @@ React + TypeScriptで実装したログイン画面・座席予約画面・管�
 
 ![ログイン画面](images/frontend-login.png)
 
-一般予約画面（Phase 1時点の参考画像。現在は仮ユーザー入力を削除し、ログアウトと管理者向けを追加）：
+一般予約画面（管理者ログイン時）：
 
 ![座席予約画面：自分の予約である座席05を選択](images/frontend-seat-reservation.png)
 
@@ -22,7 +22,7 @@ React + TypeScriptで実装したログイン画面・座席予約画面・管�
 
 ![管理者のキャンセル確認](images/frontend-admin-cancel.png)
 
-ログイン・管理者画面は実装から取得した画像。予約者はテスト用データであり、Cognitoのログイン画面は含めない。
+各画面は実装から取得した画像。予約者はテスト用データであり、Cognitoのログイン画面は含めない。
 
 ### URLと表示条件
 

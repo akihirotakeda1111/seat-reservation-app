@@ -32,14 +32,24 @@ export function SeatReservationPage({
     <div className="reservation-app">
       <header className="app-header">
         <h1>座席予約</h1>
-        {onAdmin && (
-          <button type="button" onClick={onAdmin}>
-            予約管理へ
+        <div className="header-actions">
+          {onAdmin && (
+            <button
+              className="button button-secondary"
+              type="button"
+              onClick={onAdmin}
+            >
+              予約管理へ
+            </button>
+          )}
+          <button
+            className="button button-danger"
+            type="button"
+            onClick={onLogout}
+          >
+            ログアウト
           </button>
-        )}
-        <button type="button" onClick={onLogout}>
-          ログアウト
-        </button>
+        </div>
       </header>
       <main>
         <div className="filters">

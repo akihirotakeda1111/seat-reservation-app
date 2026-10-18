@@ -1,5 +1,6 @@
 :root {
   color-scheme: light dark;
+  --disabled-opacity: 0.5;
   --s-bg: light-dark(#f5f7fa, #171c25);
   --s-panel: light-dark(#fff, #202734);
   --s-text: light-dark(#182638, #edf2f8);
@@ -77,7 +78,7 @@ main {
   gap: 20px;
   min-width: 0;
 }
-.filter-fields label {
+.date-field {
   display: grid;
   gap: 7px;
   font-weight: 600;
@@ -215,25 +216,59 @@ h2 {
   font-weight: 650;
   margin: 4px 0;
 }
+.button {
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid var(--button-border);
+  border-radius: 8px;
+  color: var(--button-text);
+  background: var(--button-bg);
+  font-weight: 600;
+}
+.button-secondary {
+  --button-bg: var(--s-panel);
+  --button-text: var(--s-text);
+  --button-border: var(--s-line);
+  --button-shade: var(--s-text);
+}
+.button-primary {
+  --button-bg: var(--s-blue);
+  --button-text: var(--s-onblue);
+  --button-border: var(--s-blue);
+  --button-shade: light-dark(#000, #fff);
+}
+.button-danger {
+  --button-bg: var(--s-red);
+  --button-text: var(--s-red-text);
+  --button-border: var(--s-red-text);
+  --button-shade: var(--s-red-text);
+}
+@media (hover: hover) {
+  .button:enabled:hover {
+    background: color-mix(in srgb, var(--button-bg), var(--button-shade) 8%);
+    border-color: color-mix(
+      in srgb,
+      var(--button-border),
+      var(--button-shade) 20%
+    );
+  }
+}
+.button:enabled:active {
+  background: color-mix(in srgb, var(--button-bg), var(--button-shade) 14%);
+  border-color: color-mix(
+    in srgb,
+    var(--button-border),
+    var(--button-shade) 30%
+  );
+}
+.button:disabled {
+  opacity: var(--disabled-opacity);
+}
 .action {
   display: block;
   width: 100%;
-  min-height: 44px;
-  border-radius: 8px;
   padding: 10px;
-  font-weight: 600;
-  border: 1px solid var(--s-line);
-  color: var(--s-text);
-  background: var(--s-panel);
   margin-top: 10px;
-}
-.primary {
-  background: var(--s-blue);
-  color: var(--s-onblue);
-  border-color: var(--s-blue);
-}
-.action:disabled {
-  opacity: 0.4;
 }
 .message {
   margin-top: 18px;
@@ -252,14 +287,6 @@ h2 {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-}
-.retry {
-  border: 1px solid var(--s-line);
-  border-radius: 8px;
-  padding: 8px 16px;
-  min-height: 44px;
-  color: var(--s-text);
-  background: var(--s-panel);
 }
 .empty-state {
   color: var(--s-muted);
@@ -300,7 +327,7 @@ h2 {
     gap: 12px;
   }
   .filter-fields,
-  .filter-fields label {
+  .date-field {
     width: 100%;
   }
   .sync {
@@ -338,6 +365,11 @@ h2 {
 .login-card p {
   line-height: 1.8;
 }
+.login-help {
+  color: var(--s-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
 .login-card button {
   width: 100%;
   min-height: 44px;
@@ -350,32 +382,14 @@ h2 {
   gap: 16px;
 }
 
+.header-actions,
 .admin-actions {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
 }
-.admin-actions button,
-.admin-filters button,
-.admin-list button {
-  min-height: 44px;
-  padding: 8px 16px;
-  border: 1px solid var(--s-line);
-  border-radius: 8px;
-  background: var(--s-panel);
-  color: var(--s-text);
-}
-.admin-filters label {
-  display: grid;
-  gap: 6px;
-  font-weight: 600;
-}
 .admin-filters span {
   color: var(--s-muted);
-}
-.admin-filters .admin-primary {
-  background: var(--s-blue);
-  color: var(--s-onblue);
 }
 .admin-list {
   border: 1px solid var(--s-line);
@@ -421,18 +435,6 @@ h2 {
 }
 .admin-user-id {
   overflow-wrap: anywhere;
-}
-.admin-list .admin-danger,
-.admin-actions .admin-danger {
-  color: var(--s-red-text);
-  border-color: var(--s-red-text);
-  background: var(--s-red);
-}
-.admin-list button:disabled,
-.admin-actions button:disabled,
-.admin-filters button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 .admin-badge {
   background: var(--s-bg);

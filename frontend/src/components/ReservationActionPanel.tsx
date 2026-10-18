@@ -41,7 +41,7 @@ export function ReservationActionPanel({
       <div className="actions">
         <button
           type="button"
-          className="action primary"
+          className="button button-primary action"
           disabled={!enabled || seat?.status !== 'AVAILABLE'}
           onClick={onReserve}
         >
@@ -49,7 +49,7 @@ export function ReservationActionPanel({
         </button>
         <button
           type="button"
-          className="action"
+          className="button button-danger action"
           disabled={!enabled || seat?.status !== 'MINE'}
           onClick={onCancel}
         >

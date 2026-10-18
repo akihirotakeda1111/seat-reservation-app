@@ -45,10 +45,19 @@ export function CancelReservationDialog({
       </div>
       {busy && <p role="status">キャンセル中…</p>}
       <div className="admin-actions">
-        <button autoFocus disabled={busy} onClick={onClose}>
+        <button
+          className="button button-secondary"
+          autoFocus
+          disabled={busy}
+          onClick={onClose}
+        >
           戻る
         </button>
-        <button className="admin-danger" disabled={busy} onClick={onConfirm}>
+        <button
+          className="button button-danger"
+          disabled={busy}
+          onClick={onConfirm}
+        >
           予約をキャンセル
         </button>
       </div>

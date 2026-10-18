@@ -21,7 +21,7 @@ export function AdminReservationFilters({
         onFetch();
       }}
     >
-      <label>
+      <label className="date-field">
         利用日
         <input
           type="date"
@@ -31,7 +31,7 @@ export function AdminReservationFilters({
         />
       </label>
       <button
-        className="admin-primary"
+        className="button button-primary"
         disabled={disabled || loading || !validDate(date)}
       >
         {loading ? '取得中…' : '予約一覧を取得'}

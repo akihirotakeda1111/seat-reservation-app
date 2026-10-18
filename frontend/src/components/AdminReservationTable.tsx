@@ -53,7 +53,7 @@ export function AdminReservationTable({
                   <td className="admin-user-id">{row.userId}</td>
                   <td>
                     <button
-                      className="admin-danger"
+                      className="button button-danger"
                       disabled={disabled || loading || past}
                       aria-label={`座席${row.seatNumber}の予約をキャンセル`}
                       onClick={() => onCancel(row)}
