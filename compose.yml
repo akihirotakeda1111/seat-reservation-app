@@ -23,13 +23,16 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/seat_reservation
       SPRING_DATASOURCE_USERNAME: seat_app
       SPRING_DATASOURCE_PASSWORD: localpass
+      COGNITO_ISSUER_URI: ${COGNITO_ISSUER_URI:?Set COGNITO_ISSUER_URI}
+      COGNITO_CLIENT_ID: ${COGNITO_CLIENT_ID:?Set COGNITO_CLIENT_ID}
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health"]
+      # 保護されたAPIの401応答でHTTP起動を確認する。
+      test: ["CMD-SHELL", "test \"$$(curl --silent --output /dev/null --write-out '%{http_code}' http://localhost:8080/api/seats?date=2026-10-12)\" = 401"]
       interval: 5s
       timeout: 5s
       retries: 24
@@ -40,6 +43,11 @@ services:
     environment:
       API_TARGET: http://backend:8080
       VITE_USE_POLLING: ${VITE_USE_POLLING:-false}
+      VITE_COGNITO_AUTHORITY: ${COGNITO_ISSUER_URI}
+      VITE_COGNITO_CLIENT_ID: ${COGNITO_CLIENT_ID}
+      VITE_COGNITO_DOMAIN: ${VITE_COGNITO_DOMAIN:?Set VITE_COGNITO_DOMAIN}
+      VITE_AUTH_REDIRECT_URI: ${VITE_AUTH_REDIRECT_URI:-http://localhost:5173/auth/callback}
+      VITE_AUTH_LOGOUT_URI: ${VITE_AUTH_LOGOUT_URI:-http://localhost:5173/login}
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-5173}:5173"
     volumes:

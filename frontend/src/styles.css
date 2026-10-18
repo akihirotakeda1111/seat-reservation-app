@@ -320,3 +320,32 @@ h2 {
     font-size: 16px;
   }
 }
+
+.login-page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.login-card {
+  width: min(100%, 420px);
+  padding: 32px;
+  border: 1px solid var(--s-line);
+  border-radius: 16px;
+  background: var(--s-panel);
+  box-shadow: 0 8px 32px #172b4d0d;
+}
+.login-card p {
+  line-height: 1.8;
+}
+.login-card button {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 16px;
+}
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}

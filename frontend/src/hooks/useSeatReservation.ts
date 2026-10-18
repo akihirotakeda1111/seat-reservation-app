@@ -5,7 +5,7 @@ import {
   getSeats,
   reserveSeat,
 } from '../api/reservations';
-import type { DemoUser, ResultNotice, Seat } from '../types/reservation';
+import type { ResultNotice, Seat } from '../types/reservation';
 import { jaToday, validDate } from '../utils/jaDate';
 
 const POLL_MS = 5_000;
@@ -18,9 +18,12 @@ const sameSeats = (a: Seat[], b: Seat[]) =>
       seat.reservationId === b[i].reservationId,
   );
 
-export function useSeatReservation() {
+export function useSeatReservation(
+  accessToken: string,
+  onUnauthorized: () => void,
+) {
   const [date, setDate] = useState(jaToday);
-  const [user, setUser] = useState<DemoUser>('demo-user-1');
+  const unauthorized = useRef(false);
   const [today, setToday] = useState(jaToday);
   const [seats, setSeats] = useState<Seat[]>([]);
   const [selectedNumber, setSelectedNumber] = useState<number | null>(null);
@@ -67,8 +70,14 @@ export function useSeatReservation() {
     let stopped = false;
     let inFlight = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const active = () => !stopped && generation.current === current;
-    if (!validDate(date) || submitting) {
+    const active = () =>
+      !stopped && !unauthorized.current && generation.current === current;
+    if (
+      !accessToken ||
+      unauthorized.current ||
+      !validDate(date) ||
+      submitting
+    ) {
       setLoading(false);
       return;
     }
@@ -80,7 +89,7 @@ export function useSeatReservation() {
       const controller = new AbortController();
       requestRef.current = controller;
       try {
-        const result = await getSeats(date, user, controller.signal);
+        const result = await getSeats(date, accessToken, controller.signal);
         if (!active()) return;
         if (result.date !== date) throw new Error('Unexpected response date');
         const old = selectedRef.current;
@@ -102,8 +111,14 @@ export function useSeatReservation() {
         );
         setFetchError(false);
         setLastChecked(new Date());
-      } catch {
+      } catch (error) {
         if (!active()) return;
+        if (error instanceof ApiError && error.status === 401) {
+          unauthorized.current = true;
+          clearSelection();
+          onUnauthorized();
+          return;
+        }
         clearSelection();
         setFetchError(true);
       } finally {
@@ -126,10 +141,10 @@ export function useSeatReservation() {
       requestRef.current?.abort();
       document.removeEventListener('visibilitychange', visibility);
     };
-  }, [date, user, reload, submitting]);
+  }, [date, accessToken, reload, submitting, onUnauthorized]);
 
-  function changeContext(nextDate: string, nextUser: DemoUser) {
-    if (busyRef.current || (date === nextDate && user === nextUser)) return;
+  function changeContext(nextDate: string) {
+    if (busyRef.current || date === nextDate) return;
     ++generation.current;
     requestRef.current?.abort();
     clearSelection();
@@ -139,14 +154,19 @@ export function useSeatReservation() {
     setFetchError(false);
     setLoading(validDate(nextDate));
     setDate(nextDate);
-    setUser(nextUser);
   }
 
   const selectedSeat =
     seats.find((s) => s.seatNumber === selectedNumber) ?? null;
   const past = validDate(date) && date < today;
   const canSelect =
-    validDate(date) && !past && !loading && !submitting && !fetchError;
+    !!accessToken &&
+    !unauthorized.current &&
+    validDate(date) &&
+    !past &&
+    !loading &&
+    !submitting &&
+    !fetchError;
 
   function selectSeat(seat: Seat) {
     if (
@@ -182,9 +202,10 @@ export function useSeatReservation() {
     setSubmitting(true);
     setNotice(null);
     try {
-      if (action === 'reserve') await reserveSeat(date, seat.seatNumber, user);
+      if (action === 'reserve')
+        await reserveSeat(date, seat.seatNumber, accessToken);
       else if (seat.status === 'MINE')
-        await cancelReservation(seat.reservationId, user);
+        await cancelReservation(seat.reservationId, accessToken);
       if (!mounted.current) return;
       setNotice({
         kind: 'success',
@@ -192,6 +213,13 @@ export function useSeatReservation() {
       });
     } catch (error) {
       if (!mounted.current) return;
+      if (error instanceof ApiError && error.status === 401) {
+        unauthorized.current = true;
+        requestRef.current?.abort();
+        clearSelection();
+        onUnauthorized();
+        return;
+      }
       let text =
         '操作の結果を確認できません。最新の座席情報を確認してから操作してください。';
       if (error instanceof ApiError && error.status < 500) {
@@ -205,7 +233,7 @@ export function useSeatReservation() {
       setNotice({ kind: 'error', text });
     } finally {
       busyRef.current = false;
-      if (mounted.current) {
+      if (mounted.current && !unauthorized.current) {
         clearSelection();
         setLoading(true);
         setSubmitting(false);
@@ -222,7 +250,6 @@ export function useSeatReservation() {
 
   return {
     date,
-    user,
     seats,
     selectedSeat,
     loading,
@@ -232,8 +259,7 @@ export function useSeatReservation() {
     notice,
     past,
     canSelect,
-    changeDate: (value: string) => changeContext(value, user),
-    changeUser: (value: DemoUser) => changeContext(date, value),
+    changeDate: (value: string) => changeContext(value),
     selectSeat,
     reserve: () => execute('reserve'),
     cancel: () => execute('cancel'),

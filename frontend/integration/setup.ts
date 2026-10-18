@@ -8,6 +8,8 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { mkdirSync, openSync, closeSync } from 'node:fs';
 import path from 'node:path';
+import { startProvider } from '../e2e/oidc-provider.mjs';
+import type { Server } from 'node:http';
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -15,6 +17,7 @@ export default async function setup() {
   const container = `seat-frontend-test-${randomUUID()}`;
   let created = false;
   let backend: ChildProcess | undefined;
+  let provider: Server | undefined;
   const cleanup = async () => {
     if (backend && backend.exitCode === null) {
       const exited = new Promise<void>((resolve) =>
@@ -28,6 +31,10 @@ export default async function setup() {
         stdio: 'ignore',
         windowsHide: true,
       });
+    if (provider) {
+      provider.closeAllConnections();
+      await new Promise<void>((resolve) => provider!.close(() => resolve()));
+    }
   };
   try {
     const probe = createServer();
@@ -90,6 +97,7 @@ export default async function setup() {
     }
     if (!dbReady) throw new Error('テストDBが起動しませんでした');
     const backendDir = path.resolve('..', 'backend');
+    provider = await startProvider();
     execSync(
       process.platform === 'win32'
         ? 'mvnw.cmd -q -DskipTests package'
@@ -115,6 +123,8 @@ export default async function setup() {
         '--spring.profiles.active=local',
         '--server.address=127.0.0.1',
         '--server.port=18081',
+        '--spring.security.oauth2.resourceserver.jwt.issuer-uri=http://127.0.0.1:18082',
+        '--app.security.cognito-client-id=frontend-test',
         `--spring.datasource.url=jdbc:postgresql://127.0.0.1:${port}/frontend_test`,
         '--spring.datasource.username=frontend_test',
         `--spring.datasource.password=${password}`,
@@ -137,11 +147,10 @@ export default async function setup() {
         const response = await fetch(
           'http://127.0.0.1:18081/api/seats?date=2026-10-12',
           {
-            headers: { 'X-Demo-User': 'demo-user-1' },
             signal: AbortSignal.timeout(1000),
           },
         );
-        if (response.ok) {
+        if (response.status === 401) {
           ready = true;
           break;
         }

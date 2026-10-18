@@ -21,6 +21,7 @@ vi.mock('../api/reservations', async (importOriginal) => {
   };
 });
 
+const onUnauthorized = vi.fn();
 const available: Seat = { seatNumber: 1, status: 'AVAILABLE' };
 const mine: Seat = { seatNumber: 5, status: 'MINE', reservationId: 'mine-5' };
 const response = (
@@ -39,6 +40,7 @@ async function settle() {
 }
 
 beforeEach(() => {
+  onUnauthorized.mockClear();
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-10-12T01:00:00Z'));
   vi.mocked(getSeats)
@@ -54,7 +56,10 @@ afterEach(() => {
 
 describe('座席画面の状態管理', () => {
   it('[POLL-03][POLL-04] 他の座席だけの更新では選択を維持し、選択席の状態変更では解除する', async () => {
-    const { result } = renderHook(useSeatReservation, { wrapper: StrictMode });
+    const { result } = renderHook(
+      () => useSeatReservation('token-a', onUnauthorized),
+      { wrapper: StrictMode },
+    );
     await settle();
     act(() => result.current.selectSeat(available));
     vi.mocked(getSeats).mockResolvedValue(
@@ -88,7 +93,9 @@ describe('座席画面の状態管理', () => {
   });
 
   it('[POLL-05] 同じMINEでも予約IDが変わったら選択解除する', async () => {
-    const { result } = renderHook(useSeatReservation);
+    const { result } = renderHook(() =>
+      useSeatReservation('token-a', onUnauthorized),
+    );
     await settle();
     act(() => result.current.selectSeat(mine));
     vi.mocked(getSeats).mockResolvedValue(
@@ -108,8 +115,8 @@ describe('座席画面の状態管理', () => {
     expect(cancelReservation).not.toHaveBeenCalled();
   });
 
-  it.each(['2026-10-12', '2026-10-13'])(
-    '[CTX-01] %sへの日付・ユーザー変更後は最新の座席を保持し、古い応答を破棄する',
+  it.each(['2026-10-13', '2026-10-14'])(
+    '[CTX-01] %sへの日付変更後は最新の座席を保持し、古い応答を破棄する',
     async (date) => {
       const slow = deferred<SeatsResponse>();
       const latestSeats: Seat[] = [
@@ -121,19 +128,21 @@ describe('座席画面の状態管理', () => {
           response(latestSeats, requestedDate),
         )
         .mockReturnValueOnce(slow.promise);
-      const { result } = renderHook(useSeatReservation);
+      const { result } = renderHook(() =>
+        useSeatReservation('token-a', onUnauthorized),
+      );
       if (date !== '2026-10-12') {
         act(() => result.current.changeDate(date));
         await settle();
       }
-      act(() => result.current.changeUser('demo-user-2'));
+
       await settle();
       expect(result.current.seats).toEqual(latestSeats);
       await act(async () => {
         slow.resolve(response([{ seatNumber: 99, status: 'AVAILABLE' }]));
       });
       expect(result.current.date).toBe(date);
-      expect(result.current.user).toBe('demo-user-2');
+
       expect(result.current.seats).toEqual(latestSeats);
       expect(result.current.seats.some((s) => s.seatNumber === 99)).toBe(false);
     },
@@ -146,7 +155,9 @@ describe('座席画面の状態管理', () => {
       seatNumber: number;
     }>();
     vi.mocked(reserveSeat).mockReturnValue(pending.promise);
-    const { result } = renderHook(useSeatReservation);
+    const { result } = renderHook(() =>
+      useSeatReservation('token-a', onUnauthorized),
+    );
     await settle();
     act(() => result.current.selectSeat(available));
     act(() => {
@@ -155,8 +166,8 @@ describe('座席画面の状態管理', () => {
     });
     expect(reserveSeat).toHaveBeenCalledTimes(1);
     expect(result.current.submitting).toBe(true);
-    act(() => result.current.changeUser('demo-user-2'));
-    expect(result.current.user).toBe('demo-user-1');
+    act(() => result.current.changeDate('2026-10-13'));
+    expect(result.current.date).toBe('2026-10-12');
     vi.mocked(getSeats).mockResolvedValue(
       response([{ seatNumber: 1, status: 'MINE', reservationId: 'new' }]),
     );
@@ -175,13 +186,15 @@ describe('座席画面の状態管理', () => {
 
   it('キャンセルに選択席の予約IDを使う', async () => {
     vi.mocked(cancelReservation).mockResolvedValue();
-    const { result } = renderHook(useSeatReservation);
+    const { result } = renderHook(() =>
+      useSeatReservation('token-a', onUnauthorized),
+    );
     await settle();
     act(() => result.current.selectSeat(mine));
     await act(async () => {
       await result.current.cancel();
     });
-    expect(cancelReservation).toHaveBeenCalledWith('mine-5', 'demo-user-1');
+    expect(cancelReservation).toHaveBeenCalledWith('mine-5', 'token-a');
     expect(result.current.selectedSeat).toBeNull();
   });
 
@@ -189,7 +202,9 @@ describe('座席画面の状態管理', () => {
     vi.mocked(reserveSeat)
       .mockRejectedValueOnce(new ApiError(409, '競合'))
       .mockRejectedValueOnce(new TypeError('network'));
-    const { result } = renderHook(useSeatReservation);
+    const { result } = renderHook(() =>
+      useSeatReservation('token-a', onUnauthorized),
+    );
     await settle();
     act(() => result.current.selectSeat(available));
     await act(async () => {
@@ -208,7 +223,9 @@ describe('座席画面の状態管理', () => {
   });
 
   it('更新失敗で操作を止め、再取得成功で復帰する', async () => {
-    const { result } = renderHook(useSeatReservation);
+    const { result } = renderHook(() =>
+      useSeatReservation('token-a', onUnauthorized),
+    );
     await settle();
     act(() => result.current.selectSeat(available));
     vi.mocked(getSeats).mockRejectedValueOnce(new Error('offline'));
@@ -226,7 +243,9 @@ describe('座席画面の状態管理', () => {
 
   it('[DATE-07] 日本時間の日付が変わると前日になった選択を解除する', async () => {
     vi.setSystemTime(new Date('2026-10-12T14:59:59Z'));
-    const { result } = renderHook(useSeatReservation);
+    const { result } = renderHook(() =>
+      useSeatReservation('token-a', onUnauthorized),
+    );
     await settle();
     act(() => result.current.selectSeat(available));
     await act(async () => {
@@ -239,7 +258,7 @@ describe('座席画面の状態管理', () => {
 
   it('[POLL-08] 非表示中は更新を休止し、再表示で即時取得する', async () => {
     const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
-    renderHook(useSeatReservation);
+    renderHook(() => useSeatReservation('token-a', onUnauthorized));
     await settle();
     const count = vi.mocked(getSeats).mock.calls.length;
     hidden.mockReturnValue(true);
@@ -255,9 +274,11 @@ describe('座席画面の状態管理', () => {
   });
 
   it('[POLL-01] 前回完了4999msでは取得せず5000msで現在の条件を取得', async () => {
-    const { result } = renderHook(useSeatReservation);
+    const { result } = renderHook(() =>
+      useSeatReservation('token-a', onUnauthorized),
+    );
     await settle();
-    act(() => result.current.changeUser('demo-user-2'));
+    act(() => result.current.changeDate('2026-10-13'));
     await settle();
     act(() => result.current.changeDate('2026-10-13'));
     await settle();
@@ -272,13 +293,15 @@ describe('座席画面の状態管理', () => {
     expect(getSeats).toHaveBeenCalledTimes(count + 1);
     expect(getSeats).toHaveBeenLastCalledWith(
       '2026-10-13',
-      'demo-user-2',
+      'token-a',
       expect.any(AbortSignal),
     );
   });
 
   it('[POLL-02] 内容不変なら座席配列と選択を維持し最終確認を更新', async () => {
-    const { result } = renderHook(useSeatReservation);
+    const { result } = renderHook(() =>
+      useSeatReservation('token-a', onUnauthorized),
+    );
     await settle();
     act(() => result.current.selectSeat(available));
     const seats = result.current.seats,
@@ -293,7 +316,9 @@ describe('座席画面の状態管理', () => {
   });
 
   it('[POLL-06] 選択席が応答から消えたら通知・選択解除', async () => {
-    const { result } = renderHook(useSeatReservation);
+    const { result } = renderHook(() =>
+      useSeatReservation('token-a', onUnauthorized),
+    );
     await settle();
     act(() => result.current.selectSeat(available));
     const remaining = initialSeats().filter((s) => s.seatNumber !== 1);
@@ -309,7 +334,7 @@ describe('座席画面の状態管理', () => {
   it('[POLL-07] 6秒のGET中に重複せず完了から5秒で再取得', async () => {
     const slow = deferred<SeatsResponse>();
     vi.mocked(getSeats).mockReturnValueOnce(slow.promise);
-    renderHook(useSeatReservation);
+    renderHook(() => useSeatReservation('token-a', onUnauthorized));
     await settle();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(6000);
@@ -329,7 +354,9 @@ describe('座席画面の状態管理', () => {
   });
 
   it('[POLL-09] 予約前の遅いGETは予約後の表示を上書きしない', async () => {
-    const { result } = renderHook(useSeatReservation);
+    const { result } = renderHook(() =>
+      useSeatReservation('token-a', onUnauthorized),
+    );
     await settle();
     const slow = deferred<SeatsResponse>();
     vi.mocked(getSeats).mockReturnValueOnce(slow.promise);
@@ -368,7 +395,9 @@ describe('座席画面の状態管理', () => {
       if (mode === 'GET待機中')
         vi.mocked(getSeats).mockReturnValueOnce(slow.promise);
       const remove = vi.spyOn(document, 'removeEventListener');
-      const { result, unmount } = renderHook(useSeatReservation);
+      const { result, unmount } = renderHook(() =>
+        useSeatReservation('token-a', onUnauthorized),
+      );
       await settle();
       const snapshot = result.current,
         count = vi.mocked(getSeats).mock.calls.length;
@@ -389,4 +418,79 @@ describe('座席画面の状態管理', () => {
       expect(result.current).toBe(snapshot);
     },
   );
+});
+
+it('GETの401でポーリングを停止し再ログインを要求する', async () => {
+  vi.mocked(getSeats).mockRejectedValue(new ApiError(401, '認証が必要です。'));
+  const { result } = renderHook(() =>
+    useSeatReservation('token-a', onUnauthorized),
+  );
+  await settle();
+  expect(onUnauthorized).toHaveBeenCalledOnce();
+  expect(result.current.canSelect).toBe(false);
+  const count = vi.mocked(getSeats).mock.calls.length;
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(15000);
+  });
+  expect(getSeats).toHaveBeenCalledTimes(count);
+});
+
+it.each([
+  { method: 'POST', status: 401 },
+  { method: 'POST', status: 403 },
+  { method: 'DELETE', status: 401 },
+  { method: 'DELETE', status: 403 },
+])(
+  '[AUTH-API-02][AUTH-API-03] $method の $status を区別し書き込みは再送しない',
+  async ({ method, status }) => {
+    const action = method === 'POST' ? reserveSeat : cancelReservation;
+    vi.mocked(action).mockRejectedValue(
+      new ApiError(status, '拒否されました。'),
+    );
+    const { result } = renderHook(() =>
+      useSeatReservation('token-a', onUnauthorized),
+    );
+    await settle();
+    act(() => result.current.selectSeat(method === 'POST' ? available : mine));
+    await act(async () => {
+      if (method === 'POST') await result.current.reserve();
+      else await result.current.cancel();
+    });
+    const count = vi.mocked(getSeats).mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15000);
+    });
+    expect(action).toHaveBeenCalledOnce();
+    expect(
+      method === 'POST' ? cancelReservation : reserveSeat,
+    ).not.toHaveBeenCalled();
+    if (status === 401) {
+      expect(onUnauthorized).toHaveBeenCalledOnce();
+      expect(getSeats).toHaveBeenCalledTimes(count);
+    } else {
+      expect(onUnauthorized).not.toHaveBeenCalled();
+      expect(result.current.notice?.text).toBe('拒否されました。');
+      expect(vi.mocked(getSeats).mock.calls.length).toBeGreaterThan(count);
+    }
+  },
+);
+
+it('[AUTH-API-04] GETの403は再認証せず取得失敗を表示し再取得できる', async () => {
+  vi.mocked(getSeats).mockRejectedValueOnce(
+    new ApiError(403, '権限がありません。'),
+  );
+  const { result } = renderHook(() =>
+    useSeatReservation('token-a', onUnauthorized),
+  );
+  await settle();
+  expect(onUnauthorized).not.toHaveBeenCalled();
+  expect(result.current.fetchError).toBe(true);
+  expect(result.current.canSelect).toBe(false);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(5000);
+  });
+  expect(getSeats).toHaveBeenCalledTimes(2);
+  expect(result.current.fetchError).toBe(false);
+  expect(result.current.canSelect).toBe(true);
+  expect(onUnauthorized).not.toHaveBeenCalled();
 });

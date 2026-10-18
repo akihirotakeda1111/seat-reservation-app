@@ -17,6 +17,13 @@ export default defineConfig({
     command: 'npm run dev -- --port 5174 --strictPort',
     url: 'http://127.0.0.1:5174',
     reuseExistingServer: false,
-    env: { API_TARGET: 'http://127.0.0.1:18081' },
+    env: {
+      API_TARGET: 'http://127.0.0.1:18081',
+      VITE_COGNITO_AUTHORITY: 'http://127.0.0.1:18082',
+      VITE_COGNITO_DOMAIN: 'http://127.0.0.1:18082',
+      VITE_COGNITO_CLIENT_ID: 'frontend-test',
+      VITE_AUTH_REDIRECT_URI: 'http://127.0.0.1:5174/auth/callback',
+      VITE_AUTH_LOGOUT_URI: 'http://127.0.0.1:5174/login',
+    },
   },
 });

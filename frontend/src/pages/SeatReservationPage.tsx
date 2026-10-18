@@ -5,8 +5,18 @@ import { ResultMessage } from '../components/ResultMessage';
 import { useSeatReservation } from '../hooks/useSeatReservation';
 import { formatTime, validDate } from '../utils/jaDate';
 
-export function SeatReservationPage() {
-  const model = useSeatReservation();
+interface Props {
+  accessToken: string;
+  onUnauthorized: () => void;
+  onLogout: () => void;
+}
+
+export function SeatReservationPage({
+  accessToken,
+  onUnauthorized,
+  onLogout,
+}: Props) {
+  const model = useSeatReservation(accessToken, onUnauthorized);
   const syncStatus = model.submitting
     ? '処理中'
     : !validDate(model.date)
@@ -20,15 +30,16 @@ export function SeatReservationPage() {
     <div className="reservation-app">
       <header className="app-header">
         <h1>座席予約</h1>
+        <button type="button" onClick={onLogout}>
+          ログアウト
+        </button>
       </header>
       <main>
         <div className="filters">
           <ReservationFilters
             date={model.date}
-            user={model.user}
             disabled={model.submitting}
             onDateChange={model.changeDate}
-            onUserChange={model.changeUser}
           />
           <div className="sync">
             <span>● {syncStatus}</span>

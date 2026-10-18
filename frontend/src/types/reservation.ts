@@ -1,5 +1,3 @@
-export type DemoUser = 'demo-user-1' | 'demo-user-2';
-
 export type Seat =
   | {
       seatNumber: number;

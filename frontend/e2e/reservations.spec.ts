@@ -1,3 +1,4 @@
+import { login, switchAccount } from './login';
 import { expect, test, type Page } from '@playwright/test';
 
 async function mockApi(page: Page) {
@@ -12,10 +13,14 @@ async function mockApi(page: Page) {
     async (route) => {
       const request = route.request();
       const url = new URL(request.url());
-      const user = request.headers()['x-demo-user'];
-      if (!['demo-user-1', 'demo-user-2'].includes(user)) {
+      const token = request.headers()['authorization']?.replace(/^Bearer /, '');
+      const user = token
+        ? JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString())
+            .sub
+        : undefined;
+      if (!['demo-user-1', 'demo-user-2', 'admin-user'].includes(user)) {
         await route.fulfill({
-          status: 400,
+          status: 401,
           json: { detail: '不正なユーザー' },
         });
         return;
@@ -38,7 +43,7 @@ async function mockApi(page: Page) {
                   : reservation.user === user
                     ? 'MINE'
                     : 'OCCUPIED',
-                ...(reservation?.user === user
+                ...(reservation && reservation.user === user
                   ? { reservationId: reservation.id }
                   : {}),
               };
@@ -88,7 +93,7 @@ test('確定画面の文言と予約・ユーザー切替・キャンセル・�
   page,
 }) => {
   await mockApi(page);
-  await page.goto('/');
+  await login(page);
   await expect(page.locator('.seat')).toHaveCount(30);
   await expect(
     page.getByRole('heading', { name: '座席予約', exact: true }),
@@ -113,14 +118,14 @@ test('確定画面の文言と予約・ユーザー切替・キャンセル・�
       exact: true,
     }),
   ).toBeEnabled();
-  await page.getByLabel('仮ユーザー').selectOption('demo-user-2');
+  await switchAccount(page, 'demo-user-2');
   await expect(
     page.getByRole('button', {
       name: '座席1、予約不可（他の人の予約）',
       exact: true,
     }),
   ).toBeDisabled();
-  await page.getByLabel('仮ユーザー').selectOption('demo-user-1');
+  await switchAccount(page, 'demo-user-1');
   await page
     .getByRole('button', { name: '座席1、予約済み（自分の予約）', exact: true })
     .click();
@@ -141,7 +146,7 @@ test('5秒更新で選択席の変化を通知し、通信障害から再取得�
   page,
 }) => {
   const { reservations, state } = await mockApi(page);
-  await page.goto('/');
+  await login(page);
   await page.getByRole('button', { name: '座席1、空席', exact: true }).click();
   reservations.set('2026-10-12:1', { user: 'demo-user-2', id: 'concurrent' });
   await page.clock.fastForward(5100);
@@ -168,7 +173,7 @@ test('5秒更新で選択席の変化を通知し、通信障害から再取得�
 test('予約競合を表示し、最新の予約不可状態を反映する', async ({ page }) => {
   const { state } = await mockApi(page);
   state.conflict = true;
-  await page.goto('/');
+  await login(page);
   await page.getByRole('button', { name: '座席1、空席', exact: true }).click();
   await page.getByRole('button', { name: '予約する', exact: true }).click();
   await expect(page.getByRole('status', { name: '操作結果' })).toContainText(
@@ -186,7 +191,7 @@ test('予約競合を表示し、最新の予約不可状態を反映する', as
 test('320px幅でも操作可能かつ画面内に収まる', async ({ page }) => {
   await mockApi(page);
   await page.setViewportSize({ width: 320, height: 850 });
-  await page.goto('/');
+  await login(page);
   await expect(page.locator('.seat')).toHaveCount(30);
   await page
     .getByRole('button', { name: '座席5、予約済み（自分の予約）', exact: true })
@@ -204,7 +209,7 @@ test('[SEAT-01][SEAT-02] 3状態の配色・文字・空席数と選択枠', asy
   page,
 }) => {
   await mockApi(page);
-  await page.goto('/');
+  await login(page);
   await expect(page.locator('.seat')).toHaveCount(30);
   await expect(page.getByText('空席 28 / 30')).toBeVisible();
   const free = page.getByRole('button', { name: '座席1、空席', exact: true });
@@ -232,7 +237,7 @@ for (const width of [1280, 320]) {
   }) => {
     await mockApi(page);
     await page.setViewportSize({ width, height: 900 });
-    await page.goto('/');
+    await login(page);
     await expect(page.locator('.seat')).toHaveCount(30);
     const columns = await page
       .locator('.seat-grid')
@@ -286,8 +291,12 @@ for (const width of [1280, 320]) {
 
 test('[UI-03] Tab・Enter・Spaceだけで予約とキャンセル', async ({ page }) => {
   const { state } = await mockApi(page);
-  await page.goto('/');
+  await login(page);
   await expect(page.locator('.seat')).toHaveCount(30);
+  await page.keyboard.press('Tab');
+  await expect(
+    page.getByRole('button', { name: 'ログアウト', exact: true }),
+  ).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(page.getByLabel('利用日')).toBeFocused();
   const free = page.getByRole('button', { name: '座席1、空席', exact: true });
@@ -349,7 +358,7 @@ test('[UI-03] Tab・Enter・Spaceだけで予約とキャンセル', async ({ pa
 
 test('[UI-04] アクセシブルな名前・選択状態・通知領域', async ({ page }) => {
   const { state } = await mockApi(page);
-  await page.goto('/');
+  await login(page);
   const free = page.getByRole('button', { name: '座席1、空席', exact: true });
   await expect(free).toHaveAttribute('aria-pressed', 'false');
   await free.click();
@@ -393,7 +402,7 @@ for (const theme of ['light', 'dark'] as const) {
   test(`[UI-05] ${theme}の状態色と文字コントラスト`, async ({ page }) => {
     await mockApi(page);
     await page.emulateMedia({ colorScheme: theme });
-    await page.goto('/');
+    await login(page);
     await expect(page.locator('.seat')).toHaveCount(30);
     await page
       .getByRole('button', { name: '座席1、空席', exact: true })
@@ -441,5 +450,121 @@ for (const theme of ['light', 'dark'] as const) {
       path: `test-results/matrix-${theme}.png`,
       fullPage: true,
     });
+  });
+}
+
+test('[AUTH-UI-01] 未認証では予約APIを呼ばず、ログイン画面を表示', async ({
+  page,
+}) => {
+  const apiRequests: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.startsWith('/api/'))
+      apiRequests.push(request.url());
+  });
+  await page.goto('/reservations');
+  await expect(
+    page.getByRole('button', { name: 'ログイン', exact: true }),
+  ).toBeEnabled();
+  await expect(page).toHaveURL(/\/login$/);
+  expect(apiRequests).toEqual([]);
+  await page.screenshot({ path: 'test-results/login.png', fullPage: true });
+});
+
+test('[AUTH-UI-02] 管理者も予約画面へ進み、トークンを永続化せず、再読み込みでログインへ戻る', async ({
+  page,
+}) => {
+  await mockApi(page);
+  await login(page, 'admin-user');
+  await expect(page.locator('.seat')).toHaveCount(30);
+  const stored = await page.evaluate(() => [
+    JSON.stringify(localStorage),
+    JSON.stringify(sessionStorage),
+  ]);
+  expect(stored.join('')).not.toContain('access_token');
+  expect(stored.join('')).not.toContain('id_token');
+  await page.reload();
+  await expect(
+    page.getByRole('button', { name: 'ログイン', exact: true }),
+  ).toBeEnabled();
+  await expect(page.locator('.seat')).toHaveCount(0);
+});
+
+test('[AUTH-UI-03] 401でポーリング停止、画面を破棄して再ログインを案内', async ({
+  page,
+}) => {
+  await mockApi(page);
+  await login(page);
+  await expect(page.locator('.seat')).toHaveCount(30);
+  let calls = 0;
+  await page.route('**/api/seats?*', async (route) => {
+    calls++;
+    await route.fulfill({ status: 401, json: { detail: '認証が必要です。' } });
+  });
+  await page.clock.fastForward(5100);
+  await expect(page.getByRole('alert')).toContainText('有効期限');
+  await expect(page.locator('.seat')).toHaveCount(0);
+  await page.clock.fastForward(15000);
+  expect(calls).toBe(1);
+});
+
+test('[AUTH-UI-04] 不一致のstateを拒否し、予約APIを呼ばない', async ({
+  page,
+}) => {
+  let calls = 0;
+  page.on('request', (r) => {
+    if (new URL(r.url()).pathname.startsWith('/api/')) calls++;
+  });
+  await page.goto('/auth/callback?code=invalid&state=unknown');
+  await expect(page.getByRole('alert')).toContainText('ログインに失敗');
+  await expect(page).toHaveURL(/\/login$/);
+  expect(calls).toBe(0);
+});
+
+for (const reason of ['401', 'expiry'] as const) {
+  test(`[AUTH-UI-06] ${reason}後の再ログインで新しいトークンによる取得・予約を再開`, async ({
+    page,
+  }) => {
+    await mockApi(page);
+    const tokens: string[] = [];
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname.startsWith('/api/')) {
+        tokens.push(request.headers()['authorization'] ?? '');
+      }
+    });
+    await login(page);
+    await expect(page.locator('.seat')).toHaveCount(30);
+    const oldToken = tokens.at(-1)!;
+    if (reason === '401') {
+      await page.route('**/api/seats?*', (route) =>
+        route.fulfill({ status: 401, json: { detail: '認証が必要です。' } }),
+      );
+      await page.clock.fastForward(5100);
+    } else {
+      await page.clock.fastForward(601000);
+    }
+    await expect(page.getByRole('alert')).toContainText('有効期限');
+    await expect(page.locator('.seat')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/login$/);
+    if (reason === '401') await page.unroute('**/api/seats?*');
+    tokens.length = 0;
+    await page.getByRole('button', { name: 'ログイン', exact: true }).click();
+    await page.getByLabel('テストユーザー').selectOption('demo-user-2');
+    await page.getByRole('button', { name: '認証する', exact: true }).click();
+    await expect(page).toHaveURL(/\/reservations$/);
+    await expect(page.locator('.seat')).toHaveCount(30);
+    await page.locator('.seat').first().click();
+    await page.getByRole('button', { name: '予約する', exact: true }).click();
+    await expect(page.locator('.seat').first()).toContainText('予約済み');
+    expect(tokens.length).toBeGreaterThanOrEqual(3);
+    for (const token of tokens) {
+      expect(token).not.toBe(oldToken);
+      const claims = JSON.parse(
+        Buffer.from(
+          token.replace(/^Bearer /, '').split('.')[1],
+          'base64url',
+        ).toString(),
+      );
+      expect(claims.sub).toBe('demo-user-2');
+    }
   });
 }

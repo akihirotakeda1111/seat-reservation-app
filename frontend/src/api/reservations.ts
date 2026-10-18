@@ -1,8 +1,4 @@
-import type {
-  DemoUser,
-  ReservationResponse,
-  SeatsResponse,
-} from '../types/reservation';
+import type { ReservationResponse, SeatsResponse } from '../types/reservation';
 
 export class ApiError extends Error {
   constructor(
@@ -16,9 +12,10 @@ export class ApiError extends Error {
 
 async function request<T>(
   path: string,
-  user: DemoUser,
+  accessToken: string,
   init: RequestInit = {},
 ): Promise<T> {
+  if (!accessToken) throw new ApiError(401, '認証が必要です。');
   const controller = new AbortController();
   const abort = () => controller.abort();
   const timeout = setTimeout(abort, 10_000);
@@ -32,7 +29,7 @@ async function request<T>(
       headers: {
         Accept: 'application/json, application/problem+json',
         ...(init.body ? { 'Content-Type': 'application/json' } : {}),
-        'X-Demo-User': user,
+        Authorization: `Bearer ${accessToken}`,
       },
     });
     if (!response.ok) {
@@ -52,18 +49,30 @@ async function request<T>(
   }
 }
 
-export const getSeats = (date: string, user: DemoUser, signal?: AbortSignal) =>
-  request<SeatsResponse>(`/seats?date=${encodeURIComponent(date)}`, user, {
-    signal,
-  });
+export const getSeats = (
+  date: string,
+  accessToken: string,
+  signal?: AbortSignal,
+) =>
+  request<SeatsResponse>(
+    `/seats?date=${encodeURIComponent(date)}`,
+    accessToken,
+    {
+      signal,
+    },
+  );
 
-export const reserveSeat = (date: string, seatNumber: number, user: DemoUser) =>
-  request<ReservationResponse>('/reservations', user, {
+export const reserveSeat = (
+  date: string,
+  seatNumber: number,
+  accessToken: string,
+) =>
+  request<ReservationResponse>('/reservations', accessToken, {
     method: 'POST',
     body: JSON.stringify({ date, seatNumber }),
   });
 
-export const cancelReservation = (id: string, user: DemoUser) =>
-  request<void>(`/reservations/${encodeURIComponent(id)}`, user, {
+export const cancelReservation = (id: string, accessToken: string) =>
+  request<void>(`/reservations/${encodeURIComponent(id)}`, accessToken, {
     method: 'DELETE',
   });

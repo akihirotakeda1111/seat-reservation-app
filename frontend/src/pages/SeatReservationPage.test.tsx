@@ -23,6 +23,9 @@ import {
 } from '../test/apiHarness';
 
 let api: ReturnType<typeof apiHarness>;
+let view: ReturnType<typeof render>;
+const onUnauthorized = vi.fn();
+const onLogout = vi.fn();
 const reserve = () => screen.getByRole('button', { name: '予約する' });
 const cancel = () => screen.getByRole('button', { name: '予約をキャンセル' });
 const seat = (n: number) =>
@@ -38,7 +41,14 @@ const advance = async (ms: number) => {
   });
 };
 async function open() {
-  render(<SeatReservationPage />);
+  view = render(
+    <SeatReservationPage
+      key={A}
+      accessToken={A}
+      onUnauthorized={onUnauthorized}
+      onLogout={onLogout}
+    />,
+  );
   await settle();
 }
 async function changeDate(value: string) {
@@ -46,7 +56,14 @@ async function changeDate(value: string) {
   await settle();
 }
 async function changeUser(value: string) {
-  fireEvent.change(screen.getByLabelText('仮ユーザー'), { target: { value } });
+  view.rerender(
+    <SeatReservationPage
+      key={value}
+      accessToken={value}
+      onUnauthorized={onUnauthorized}
+      onLogout={onLogout}
+    />,
+  );
   await settle();
 }
 function disabledActions() {
@@ -78,9 +95,11 @@ describe('マトリクス：画面と実APIクライアント（fetch境界の�
   it('[INIT-01] 初期日付・ユーザー・30席・未選択・最終確認', async () => {
     await open();
     expect(screen.getByLabelText('利用日')).toHaveValue(D);
-    expect(screen.getByLabelText('仮ユーザー')).toHaveValue(A);
+    expect(screen.queryByLabelText('仮ユーザー')).not.toBeInTheDocument();
     expect(api.reads()[0].url.searchParams.get('date')).toBe(D);
-    expect(api.reads()[0].init.headers).toMatchObject({ 'X-Demo-User': A });
+    expect(api.reads()[0].init.headers).toMatchObject({
+      Authorization: `Bearer ${A}`,
+    });
     expect(document.querySelectorAll('.seat')).toHaveLength(30);
     noSelection();
     disabledActions();
@@ -197,7 +216,7 @@ describe('マトリクス：画面と実APIクライアント（fetch境界の�
       expect(reserve()).toBeDisabled();
     },
   );
-  it('[USER-01] A→B→Aで選択・予約IDを破棄し再取得', async () => {
+  it('[USER-01] 再ログインでA→B→Aとなったとき選択・予約IDを破棄し再取得', async () => {
     await open();
     fireEvent.click(seat(5));
     const pending = deferred<Response>();
@@ -206,7 +225,7 @@ describe('マトリクス：画面と実APIクライアント（fetch境界の�
     noSelection();
     disabledActions();
     expect(api.reads().at(-1)!.init.headers).toMatchObject({
-      'X-Demo-User': B,
+      Authorization: `Bearer ${B}`,
     });
     pending.resolve(seatResponse([{ seatNumber: 5, status: 'OCCUPIED' }]));
     await settle();
@@ -217,7 +236,7 @@ describe('マトリクス：画面と実APIクライアント（fetch境界の�
     noSelection();
     disabledActions();
     expect(api.reads().at(-1)!.init.headers).toMatchObject({
-      'X-Demo-User': A,
+      Authorization: `Bearer ${A}`,
     });
     expect(seat(5)).toHaveTextContent('予約済み');
     fireEvent.click(cancel());
@@ -281,7 +300,9 @@ describe('マトリクス：画面と実APIクライアント（fetch境界の�
       expect(api.writes()).toHaveLength(1);
       const request = api.writes()[0];
       expect(request.method).toBe(action);
-      expect(request.init.headers).toMatchObject({ 'X-Demo-User': A });
+      expect(request.init.headers).toMatchObject({
+        Authorization: `Bearer ${A}`,
+      });
       if (action === 'POST') {
         expect(request.url.pathname).toBe('/api/reservations');
         expect(request.init.headers).toMatchObject({
@@ -363,22 +384,19 @@ describe('マトリクス：画面と実APIクライアント（fetch境界の�
       await perform(action);
       expect(screen.getByText('処理しています…')).toBeInTheDocument();
       expect(screen.getByLabelText('利用日')).toBeDisabled();
-      expect(screen.getByLabelText('仮ユーザー')).toBeDisabled();
       for (const button of document.querySelectorAll('.seat'))
         expect(button).toBeDisabled();
       disabledActions();
       fireEvent.change(screen.getByLabelText('利用日'), {
         target: { value: NEXT },
       });
-      fireEvent.change(screen.getByLabelText('仮ユーザー'), {
-        target: { value: B },
-      });
+
       fireEvent.click(reserve());
       fireEvent.click(cancel());
       fireEvent.click(seat(2));
       expect(api.writes()).toHaveLength(1);
       expect(screen.getByLabelText('利用日')).toHaveValue(D);
-      expect(screen.getByLabelText('仮ユーザー')).toHaveValue(A);
+      expect(screen.queryByLabelText('仮ユーザー')).not.toBeInTheDocument();
       const originalSeatNumber = action === 'POST' ? 1 : 5;
       expect(selected()).toHaveLength(1);
       expect(seat(originalSeatNumber)).toHaveAttribute('aria-pressed', 'true');

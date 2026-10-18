@@ -1,3 +1,4 @@
+import { login, switchAccount } from '../e2e/login';
 import { execFileSync } from 'node:child_process';
 import { expect, test, type Page } from '@playwright/test';
 import { jaToday } from '../src/utils/jaDate';
@@ -51,9 +52,8 @@ const rows = () =>
 const seat = (page: Page, n: number) =>
   page.getByRole('button', { name: new RegExp(`^座席${n}、`) });
 async function open(page: Page, user = A) {
-  await page.goto('/');
+  await login(page, user);
   await expect(page.locator('.seat')).toHaveCount(30);
-  if (user !== A) await page.getByLabel('仮ユーザー').selectOption(user);
   await expect(seat(page, 1)).toBeEnabled();
 }
 async function write(
@@ -98,10 +98,10 @@ test('[INT-01] ブラウザ→実API→DBで登録・切替・削除、他予約
       `SELECT id || ':' || user_id FROM reservations WHERE reservation_date='${day}' AND seat_number=1;`,
     ),
   ).toBe(`${body.id}:${A}`);
-  await page.getByLabel('仮ユーザー').selectOption(B);
+  await switchAccount(page, B);
   await expect(seat(page, 1)).toHaveText(/予約不可/);
   await expect(seat(page, 1)).toBeDisabled();
-  await page.getByLabel('仮ユーザー').selectOption(A);
+  await switchAccount(page, A);
   await expect(seat(page, 1)).toHaveText(/予約済み/);
   await seat(page, 1).click();
   await write(page, 'DELETE', '予約をキャンセル', 204);
@@ -183,7 +183,10 @@ test('[INT-04] 過去日の3状態を表示し書き込みなし・DB不変', as
   const before = rows();
   const writes: string[] = [];
   page.on('request', (request) => {
-    if (['POST', 'DELETE'].includes(request.method()))
+    if (
+      request.url().includes('/api/') &&
+      ['POST', 'DELETE'].includes(request.method())
+    )
       writes.push(request.url());
   });
   await open(page);

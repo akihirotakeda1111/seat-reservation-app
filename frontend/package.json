@@ -14,8 +14,10 @@
     "test:integration": "playwright test --config playwright.integration.config.ts"
   },
   "dependencies": {
+    "oidc-client-ts": "^3.5.0",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "react-oidc-context": "^3.3.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",
