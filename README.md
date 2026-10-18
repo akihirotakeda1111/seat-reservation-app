@@ -22,9 +22,10 @@ Java 25 / Spring Boot / Reactを使用した座席予約システム。
 - 空席の予約と自分の予約のキャンセル
 - 空席・自席・他ユーザー予約席の区別
 - Pollingによる座席状況の更新
-- ローカル用の仮ユーザー切替による複数ユーザーの動作確認
+- Amazon Cognitoによるログイン・ログアウト
+- 管理者による指定日の全予約取得と任意ユーザーの予約キャンセル
 
-ユーザー登録・ログイン、管理者による予約管理はPhase 3で対応予定。現在は認証のないローカル開発用の構成とする。
+ログイン後は権限にかかわらず一般予約画面へ進む。`ADMINS`グループの管理者には「予約管理へ」を表示し、管理者画面で一覧取得・キャンセルを行う。一般画面では管理者も自分の予約だけをキャンセルできる。過去日のキャンセルは両画面とも不可。
 
 ## 画面構成
 
@@ -38,9 +39,10 @@ Java 25 / Spring Boot / Reactを使用した座席予約システム。
 
 ```mermaid
 flowchart LR
-    Browser["Browser / React"] --> Frontend["Frontend / Vite"]
+    Browser["Browser / React"] <-->|"Authorization Code + PKCE"| Cognito["Amazon Cognito / Managed Login"]
+    Browser --> Frontend["Frontend / Vite"]
     subgraph Compose["Docker Compose"]
-        Frontend -->|"/api proxy"| Backend["Backend / Spring Boot"]
+        Frontend -->|"/api proxy / Bearer Access Token"| Backend["Backend / Spring Boot"]
         Backend -->|"JPA / JDBC"| DB["PostgreSQL"]
         Flyway["Flyway / Backend起動時"] --> DB
     end
@@ -78,6 +80,8 @@ Frontend・Backend・Databaseをルートの[compose.yml](compose.yml)で一括�
 - 以下のコマンドはリポジトリのルートで実行する。
 - 一括起動ではコンテナ内でビルドするため、ホストへのJava・Node.jsのインストールは不要。初回はイメージ・依存関係のダウンロードが必要。
 
+Cognitoの設定を準備し、ルートの`.env.example`を`.env`へコピーして設定する。詳細は[認証設定](frontend/README.md#認証設定)を参照。
+
 ### 一括起動
 
 ```sh
@@ -85,12 +89,12 @@ docker compose up --build -d --wait
 docker compose ps
 ```
 
-DB、Backend、Frontendの順にヘルスチェックを確認して起動する。初回のDB作成時にはFlywayがテーブルと30席の初期データを登録する。
+DB、Backend、Frontendの順にヘルスチェックを確認して起動する。Backendは保護APIの401応答によるHTTP起動確認であり、DBなどの詳細ヘルス判定ではない。初回のDB作成時にはFlywayがテーブルと30席の初期データを登録する。
 
 | 接続先 | URL・ポート |
 | --- | --- |
-| 予約画面 | http://localhost:5173 |
-| Backendヘルスチェック | http://localhost:8080/actuator/health |
+| アプリ画面（未認証時はログイン画面） | http://localhost:5173 |
+| Backend API（認証必須） | http://localhost:8080/api/seats |
 | PostgreSQL（ローカル接続用） | localhost:5432 |
 
 各ポートはループバックアドレスにのみ公開する。ポートが競合する場合は、`FRONTEND_PORT`・`BACKEND_PORT`・`POSTGRES_PORT`を環境変数で指定して起動する。表の接続先も指定したポートに読み替える。
@@ -130,6 +134,12 @@ Composeのビルドではテストを実行しない。開発・検証手順は[
 
 主要な設計判断はADR（Architecture Decision Record）として記録する。
 
+## 認証・管理者機能
+
+ログイン情報の入力はCognito Managed Loginで行い、アプリはAuthorization Code + PKCEで取得したAccess TokenをAPIへ送信する。BackendがJWTと管理者権限を検証し、一般向けキャンセルでは予約所有者も確認する。
+
+トークンはブラウザのメモリに保持し、再読み込み・有効期限切れ・APIの401では再ログインする。管理者一覧は手動取得で、一般画面の5秒ごとの更新とは異なる。操作・設定は[Frontend README](frontend/README.md)、画面遷移とエラー時の仕様は[Frontend仕様](doc/system-design/frontend-specification.md)、設計判断は[ADR-006](doc/adr/adr-006.md)を参照。
+
 ## Transaction / Concurrency
 
 二重予約は日付・座席のUNIQUE制約で防止し、予約・キャンセルはService単位のTransactionで確定する。同時予約の対象制約違反は409、同時キャンセルで削除対象が先に消えた場合は削除件数に基づいて404を返す。
@@ -154,3 +164,5 @@ Composeのビルドではテストを実行しない。開発・検証手順は[
 - [ADR-003：APIエラーレスポンスの標準化](doc/adr/adr-003.md)
 - [ADR-004：ローカル環境のCompose統合起動](doc/adr/adr-004.md)
 - [ADR-005：予約・キャンセルの競合制御とTransaction境界](doc/adr/adr-005.md)
+
+- [ADR-006：認証アーキテクチャとユーザー管理方針](doc/adr/adr-006.md)

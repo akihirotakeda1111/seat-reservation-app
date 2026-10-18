@@ -1,39 +1,80 @@
 # Frontend
 
-React / TypeScript / Viteで実装した座席予約画面。日付ごとの座席状況を表示し、仮ユーザーを切り替えて予約・キャンセルを確認できる。
+React / TypeScript / Viteによるログイン画面・座席予約画面・管理者予約一覧画面。
 
-アプリ全体のローカル起動・停止は[ルートREADME](../README.md#ローカル起動停止)を参照。
+## 認証設定
+
+CognitoでクライアントシークレットのないSPA用App ClientとManaged Loginのドメインを用意する。Authorization Code Grant、PKCE、`openid`スコープを使用する。一般ユーザー・管理者ともログイン後は`/reservations`へ遷移する。
+
+Cognitoの許可URLに以下を登録する。
+
+- Callback URL：`http://localhost:5173/auth/callback`
+- Sign-out URL：`http://localhost:5173/login`
+
+Docker Composeではルートの`.env.example`を`.env`へコピーして実際のUser Pool・App Client・ドメインを設定する。起動は[ルートREADME](../README.md#ローカル起動停止)を参照。BackendとFrontendは同じIssuer・Client IDを使用する。
+
+Frontendだけ起動する場合は`frontend/.env.example`を`frontend/.env.local`へコピーして設定し、`npm ci`、`npm run dev`を実行する。Backendは別途起動する。APIはViteの`/api`プロキシを経由する。
+
+| 設定                   | 内容                                                       |
+| ---------------------- | ---------------------------------------------------------- |
+| VITE_COGNITO_AUTHORITY | User PoolのIssuer URL（Managed Loginのドメインとは異なる） |
+| VITE_COGNITO_CLIENT_ID | シークレットなしApp Client ID                              |
+| VITE_COGNITO_DOMAIN    | Managed LoginのHTTPSドメイン                               |
+| VITE_AUTH_REDIRECT_URI | このサイトの`/auth/callback`の絶対URL                      |
+| VITE_AUTH_LOGOUT_URI   | このサイトの`/login`の絶対URL                              |
+
+ポートや公開URLを変更する場合はCognitoの許可URLと上記URLを揃える。`VITE_`変数は公開設定なので秘密情報を含めない。本番ビルド時に取り込まれるため、変更時は再ビルドする。本番配信では`/login`・`/auth/callback`・`/reservations`・`/admin/reservations`をSPAのindex.htmlに解決し、`/api`はBackendへ転送する。
+
+ブラウザで開くURL、戻り先の設定、Cognitoの許可URLは一致させる。`localhost`と`127.0.0.1`は混在させない。ログイン時の`redirect_mismatch`やログアウト時のInvalid requestでは、App Clientと許可URLの設定を確認する。
 
 ## 基本操作フロー
 
-1. 「利用日」で予約したい日付を選ぶ。初期表示は日本時間の当日。過去日は閲覧のみ。
-2. 「仮ユーザー」でユーザー1／ユーザー2を選ぶ。切替後は、そのユーザーから見た座席状況に更新される。
-3. 空席を選び、操作パネルの「予約する」を押す。結果通知と更新後の座席状況を確認する。
-4. キャンセルする場合は、自分の「予約済み」の座席を選び、「予約をキャンセル」を押す。他ユーザーの「予約不可」の座席は操作できない。
+### 共通：ログイン・ログアウト
 
-座席状況は自動更新される。取得に失敗した場合は、表示される「再取得」から更新できる。
+「ログイン」からCognito Managed Loginへ移動し、Cognito側で認証情報を入力する。ログイン後は権限にかかわらず一般予約画面へ進む。「ログアウト」は両画面から実行でき、Cognitoを経由してログイン画面へ戻る。
 
-## 単体ビルド・テスト
+トークンはメモリに保持する。再読み込み・有効期限切れ・APIの401では再ログインを案内し、403では権限エラーを表示する。
 
-Node.js 24とnpmを用意し、`frontend`ディレクトリで実行する。
+### 一般：予約・キャンセル
+
+1. 予約画面で「利用日」を選ぶ。初期表示は日本時間の当日。
+2. 空席を選び「予約する」を押す。
+3. 自分の予約済み座席を選び「予約をキャンセル」で取り消す。
+
+座席状況は前回の取得完了から5秒後に更新する。一般画面では管理者も他人の予約は取り消せない。過去日は閲覧のみ。
+
+### 管理者：予約一覧・キャンセル
+
+Cognitoの`ADMINS`グループに所属するユーザーに「予約管理へ」を表示する。グループ変更後は再ログインする。
+
+1. 「予約管理へ」で管理者画面を開く。
+2. 利用日を指定し「予約一覧を取得」を押す。座席番号・予約者ID・件数・最終取得時刻を表示する。
+3. 対象行の「キャンセル」で内容を確認し、「予約をキャンセル」で確定する。「戻る」で中止できる。
+4. 操作結果と再取得した一覧を確認する。「予約画面へ」で一般画面へ戻る。
+
+管理者一覧は手動取得。他人の予約もキャンセルできるが、過去日は閲覧のみ。取得失敗時は「再取得」で最新情報を確認する。処理中の追加操作と、失敗した取消の自動再送は行わない。
+
+## ビルド・テスト
+
+Node.js 24とnpmを用意し、`frontend`で実行する。
 
 ```sh
 npm ci
 npm run build
 npm test
-```
-
-`build`はTypeScriptのチェックと本番用ビルドを行い、`dist`に出力する。`test`はVitest / Testing Libraryによるテストを1回実行する。いずれもBackend・DBの起動は不要。
-
-ブラウザでの操作検証にはGoogle Chromeを用意し、次を実行する。
-
-```sh
 npm run test:e2e
+npm run test:integration
 ```
 
-APIをモックしたPlaywrightテスト。設定に従ってViteが自動起動するため、個別の起動操作は不要。ポート5173を使用する。
+`build`は型検証と本番ビルド、`test`はVitest / Testing Library。ブラウザテストにはGoogle Chromeが必要。
 
-実API・DBとの結合検証は`npm run test:integration`で実行する。追加でJDK 25（`JAVA_HOME`設定）と起動済みDockerが必要。テストが専用PostgreSQL・Backend・Viteを起動するため、ポート18081と5174を空けておく。
+E2EはAPIをモックし、Vite（5174）とテスト専用OIDCサーバー（18082）を自動起動する。Authorization Code + PKCEによる認証を行い、テストユーザーを選択する。
+
+実API結合テストはJDK 25（JAVA_HOME）と起動済みDockerが必要。専用PostgreSQL、Backend（18081）、Vite（5174）、同OIDCサーバー（18082）を起動し、署名付きJWTをBackendが検証する。E2Eと結合テストは同時実行しない。テスト用Issuerはテスト設定だけで利用し、実Cognitoへの接続・設定は別途手動確認する。
+
+認証・一般予約・管理者機能の単体／ブラウザ／実API結合テストを用意する。個別ケースはテストマトリクスを参照。実Cognitoの許可URL・ログインセッション・メール配信は別途確認する。
+
+E2Eのポートは5174固定とし、通常開発の5173と分離する。実API結合テストと5174・18082を共用するため、同時実行しない。
 
 ## 関連ドキュメント
 
