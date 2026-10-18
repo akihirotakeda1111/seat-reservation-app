@@ -107,6 +107,29 @@ docker compose logs -f backend frontend postgres
 
 Frontendの`src`など、Composeでマウントしたファイルの変更はViteが反映する。Windowsでファイル変更を検知しない場合は、`VITE_USE_POLLING=true`を環境変数で指定して再起動する（座席情報の定期更新とは別の設定）。Backendや依存関係を変更した場合は、上記の起動コマンドを再実行して再ビルドする。
 
+### Cognitoを使わない固定ユーザーでの操作
+
+開発用の専用Composeで、認証を省略して予約・管理者機能を操作できる。Cognitoの設定は不要。
+
+```powershell
+docker compose -f compose.demo.yml up --build -d --wait
+docker compose -f compose.demo.yml down
+```
+
+既定は`demo-user-1`／一般ユーザー。管理者に切り替える場合は、同じターミナルで設定して再起動する。
+
+```powershell
+$env:DEMO_USER_ID='admin-user'
+$env:DEMO_ROLE='ADMIN'
+docker compose -f compose.demo.yml up -d --wait
+```
+
+`DEMO_ROLE`は`USER`または`ADMIN`。変更後はブラウザを再読み込みする。一般ユーザーへ戻す場合はIDと権限を再設定する。全アクセスがサーバーに設定した同一ユーザーとなり、ブラウザごとにユーザーを切り替えることはできない。
+
+通常構成と同じポートを使うため、切替前に起動中の構成を停止する。同時起動する場合は`FRONTEND_PORT`・`BACKEND_PORT`・`POSTGRES_PORT`を分ける。DBは`seat-reservation-demo`プロジェクト専用ボリュームに保存し、Cognito用とは共有しない。
+
+固定ユーザーモードはローカル操作確認専用。JWT署名検証・Cognitoログイン／ログアウトの確認には通常の`compose.yml`を使う。ポートはループバックのみへ公開し、この構成を外部公開しない。
+
 ### 一括停止
 
 ```sh

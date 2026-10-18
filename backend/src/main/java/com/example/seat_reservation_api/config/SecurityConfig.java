@@ -1,6 +1,7 @@
 package com.example.seat_reservation_api.config;
 
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -53,6 +54,7 @@ public class SecurityConfig {
         }
 
         @Bean
+        @Profile("!demo")
         JwtDecoder jwtDecoder(
                         @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String issuer,
                         @Value("${app.security.cognito-client-id}") String clientId) {

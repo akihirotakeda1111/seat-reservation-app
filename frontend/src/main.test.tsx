@@ -43,3 +43,20 @@ it.each(['', 'invalid-url'])(
     expect(fetch).not.toHaveBeenCalled();
   },
 );
+
+it('固定ユーザーモードを本番ビルド条件では起動しない', async () => {
+  vi.resetModules();
+  vi.stubEnv('DEV', false);
+  vi.stubEnv('VITE_DEMO_AUTH', 'true');
+  vi.stubEnv('VITE_DEMO_USER_ID', 'demo-user-1');
+  vi.stubEnv('VITE_DEMO_ROLE', 'ADMIN');
+  const fetch = vi.fn();
+  vi.stubGlobal('fetch', fetch);
+  document.body.innerHTML = '<div id="root"></div>';
+  await act(async () => {
+    await import('./main');
+  });
+  expect(screen.getByRole('alert')).toHaveTextContent('開発環境');
+  expect(auth.provider).not.toHaveBeenCalled();
+  expect(fetch).not.toHaveBeenCalled();
+});

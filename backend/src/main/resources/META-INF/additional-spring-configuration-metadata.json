@@ -4,6 +4,16 @@
       "name": "app.security.cognito-client-id",
       "type": "java.lang.String",
       "description": "Cognito Access Tokenのclient_id"
+    },
+    {
+      "name": "app.demo.user-id",
+      "type": "java.lang.String",
+      "description": "開発専用の固定ユーザーID"
+    },
+    {
+      "name": "app.demo.role",
+      "type": "java.lang.String",
+      "description": "開発専用の固定権限（USER / ADMIN）"
     }
   ]
 }

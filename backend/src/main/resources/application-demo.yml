@@ -1,0 +1,14 @@
+# ローカル固定ユーザー専用。外部Issuerへの接続は行わない。
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost/demo
+
+app:
+  security:
+    cognito-client-id: demo
+  demo:
+    user-id: ${DEMO_USER_ID:demo-user-1}
+    role: ${DEMO_ROLE:USER}
