@@ -5,9 +5,18 @@ interface Props {
   fetchError: boolean;
   loading: boolean;
   onRetry: () => void;
+  emptyText?: string;
+  fetchErrorText?: string;
 }
 
-export function ResultMessage({ notice, fetchError, loading, onRetry }: Props) {
+export function ResultMessage({
+  notice,
+  fetchError,
+  loading,
+  onRetry,
+  emptyText = '日付と座席を選択してください。',
+  fetchErrorText = '最新の座席情報を取得できません。',
+}: Props) {
   return (
     <div className="messages">
       <div
@@ -17,11 +26,11 @@ export function ResultMessage({ notice, fetchError, loading, onRetry }: Props) {
         aria-label="操作結果"
         aria-live="polite"
       >
-        {notice?.text ?? '日付と座席を選択してください。'}
+        {notice?.text ?? emptyText}
       </div>
       {fetchError && (
         <div className="message fetch-error" data-kind="error" role="alert">
-          <span>最新の座席情報を取得できません。</span>
+          <span>{fetchErrorText}</span>
           <button
             type="button"
             className="retry"

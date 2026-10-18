@@ -2,16 +2,29 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 import { LoginPage } from './pages/LoginPage';
 import { SeatReservationPage } from './pages/SeatReservationPage';
+import { AdminReservationPage } from './pages/AdminReservationPage';
 
 export function App({ logoutUrl }: { logoutUrl: string }) {
   const auth = useAuth();
   const [message, setMessage] = useState<string>();
   const [blocked, setBlocked] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
+  const [adminView, setAdminView] = useState(
+    () => location.pathname === '/admin/reservations',
+  );
   const { removeUser, events } = auth;
   const accessToken = auth.user?.access_token;
   const authenticated =
     auth.isAuthenticated && !auth.user?.expired && !!accessToken && !blocked;
+  const groups = auth.user?.profile['cognito:groups'];
+  const isAdmin = Array.isArray(groups) && groups.includes('ADMINS');
+  useEffect(() => {
+    const navigate = () =>
+      setAdminView(location.pathname === '/admin/reservations');
+    window.addEventListener('popstate', navigate);
+    return () => window.removeEventListener('popstate', navigate);
+  }, []);
+  const showAdmin = authenticated && isAdmin && adminView;
 
   const expire = useCallback(() => {
     setBlocked(true);
@@ -28,14 +41,25 @@ export function App({ logoutUrl }: { logoutUrl: string }) {
       window.history.replaceState(
         null,
         '',
-        authenticated ? '/reservations' : '/login',
+        authenticated
+          ? showAdmin
+            ? '/admin/reservations'
+            : '/reservations'
+          : '/login',
       );
     }
-  }, [auth.isLoading, auth.activeNavigator, authenticated]);
+  }, [
+    auth.isLoading,
+    auth.activeNavigator,
+    authenticated,
+    showAdmin,
+    adminView,
+  ]);
 
   async function login() {
     if (redirecting) return;
     setRedirecting(true);
+    setAdminView(false);
     setMessage(undefined);
     window.history.replaceState(null, '', '/login');
     try {
@@ -70,12 +94,23 @@ export function App({ logoutUrl }: { logoutUrl: string }) {
       />
     );
 
+  if (showAdmin)
+    return (
+      <AdminReservationPage
+        key={auth.user!.profile.sub}
+        accessToken={accessToken!}
+        onUnauthorized={expire}
+        onLogout={() => void logout()}
+        onReservations={() => setAdminView(false)}
+      />
+    );
   return (
     <SeatReservationPage
       key={auth.user!.profile.sub}
       accessToken={accessToken!}
       onUnauthorized={expire}
       onLogout={() => void logout()}
+      onAdmin={isAdmin ? () => setAdminView(true) : undefined}
     />
   );
 }

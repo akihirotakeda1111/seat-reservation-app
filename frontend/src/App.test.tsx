@@ -118,6 +118,9 @@ it('ログイン開始失敗後に再試行できる', async () => {
   await act(async () => fireEvent.click(screen.getByRole('button')));
   expect(state.auth.signinRedirect).toHaveBeenCalledTimes(2);
   expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'ログインを処理しています…',
+  );
   expect(screen.getByRole('button')).toBeDisabled();
 });
 

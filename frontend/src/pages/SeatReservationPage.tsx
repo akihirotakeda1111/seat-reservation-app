@@ -9,12 +9,14 @@ interface Props {
   accessToken: string;
   onUnauthorized: () => void;
   onLogout: () => void;
+  onAdmin?: () => void;
 }
 
 export function SeatReservationPage({
   accessToken,
   onUnauthorized,
   onLogout,
+  onAdmin,
 }: Props) {
   const model = useSeatReservation(accessToken, onUnauthorized);
   const syncStatus = model.submitting
@@ -30,6 +32,11 @@ export function SeatReservationPage({
     <div className="reservation-app">
       <header className="app-header">
         <h1>座席予約</h1>
+        {onAdmin && (
+          <button type="button" onClick={onAdmin}>
+            予約管理へ
+          </button>
+        )}
         <button type="button" onClick={onLogout}>
           ログアウト
         </button>

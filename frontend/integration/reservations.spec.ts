@@ -209,3 +209,33 @@ test('[INT-04] 過去日の3状態を表示し書き込みなし・DB不変', as
   expect(writes).toHaveLength(0);
   expect(rows()).toBe(before);
 });
+
+test('[ADMIN-INT-01] 管理者が実APIで他人の予約を取得・取消し他の予約を保持する', async ({
+  page,
+}) => {
+  sql(`INSERT INTO reservations(id,reservation_date,seat_number,user_id) VALUES
+    ('11111111-1111-4111-8111-111111111111','${day}',5,'${A}'),
+    ('22222222-2222-4222-8222-222222222222','${day}',8,'${B}');`);
+  await open(page, 'admin-user');
+  await page.getByRole('button', { name: '予約管理へ' }).click();
+  const fetched = page.waitForResponse((r) =>
+    r.url().includes('/api/admin/reservations?'),
+  );
+  await page.getByRole('button', { name: '予約一覧を取得' }).click();
+  expect((await fetched).status()).toBe(200);
+  await expect(page.getByRole('cell', { name: A, exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: B, exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '座席5の予約をキャンセル' }).click();
+  const deleted = page.waitForResponse(
+    (r) => r.request().method() === 'DELETE',
+  );
+  await page
+    .getByRole('button', { name: '予約をキャンセル', exact: true })
+    .click();
+  expect((await deleted).status()).toBe(204);
+  await expect(page.getByRole('cell', { name: A, exact: true })).toHaveCount(0);
+  await expect(page.getByRole('cell', { name: B, exact: true })).toBeVisible();
+  expect(
+    sql('SELECT seat_number FROM reservations ORDER BY seat_number;'),
+  ).toBe('8');
+});

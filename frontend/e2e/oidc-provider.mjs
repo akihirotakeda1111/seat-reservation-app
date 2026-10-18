@@ -140,6 +140,9 @@ export function startProvider(port = 18082) {
         id_token: jwt({
           ...common,
           aud: clientId,
+          ...(record.user === 'admin-user'
+            ? { 'cognito:groups': ['ADMINS'] }
+            : {}),
           ...(record.nonce ? { nonce: record.nonce } : {}),
         }),
       });

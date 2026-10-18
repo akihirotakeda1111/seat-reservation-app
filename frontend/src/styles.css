@@ -349,3 +349,121 @@ h2 {
   justify-content: space-between;
   gap: 16px;
 }
+
+.admin-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.admin-actions button,
+.admin-filters button,
+.admin-list button {
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid var(--s-line);
+  border-radius: 8px;
+  background: var(--s-panel);
+  color: var(--s-text);
+}
+.admin-filters label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+.admin-filters span {
+  color: var(--s-muted);
+}
+.admin-filters .admin-primary {
+  background: var(--s-blue);
+  color: var(--s-onblue);
+}
+.admin-list {
+  border: 1px solid var(--s-line);
+  border-radius: 12px;
+  background: var(--s-panel);
+  overflow: hidden;
+}
+.admin-list-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px;
+}
+.admin-list-header h2 {
+  font-size: 18px;
+  margin: 0;
+}
+.admin-list-header span,
+.admin-list-header small {
+  color: var(--s-muted);
+  font-size: 13px;
+}
+.admin-list > p {
+  padding: 0 18px 18px;
+}
+.admin-table-scroll {
+  overflow-x: auto;
+}
+.admin-list table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.admin-list th,
+.admin-list td {
+  text-align: left;
+  padding: 16px;
+  border-top: 1px solid var(--s-line);
+}
+.admin-list th {
+  background: var(--s-bg);
+}
+.admin-user-id {
+  overflow-wrap: anywhere;
+}
+.admin-list .admin-danger,
+.admin-actions .admin-danger {
+  color: var(--s-red-text);
+  border-color: var(--s-red-text);
+  background: var(--s-red);
+}
+.admin-list button:disabled,
+.admin-actions button:disabled,
+.admin-filters button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.admin-badge {
+  background: var(--s-bg);
+  color: var(--s-blue);
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-size: 14px;
+}
+.admin-dialog {
+  max-width: min(520px, calc(100% - 32px));
+  border: 1px solid var(--s-line);
+  border-radius: 16px;
+  padding: 24px;
+  color: var(--s-text);
+  background: var(--s-panel);
+}
+.admin-dialog::backdrop {
+  background: #18263866;
+}
+.admin-dialog h2 {
+  font-size: 20px;
+}
+@media (max-width: 760px) {
+  .app-header {
+    flex-wrap: wrap;
+  }
+  .admin-list th,
+  .admin-list td {
+    padding: 10px;
+  }
+  .admin-list button {
+    padding: 8px;
+  }
+}
