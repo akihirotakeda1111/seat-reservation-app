@@ -1,10 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const baseURL = 'http://127.0.0.1:5174';
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
   use: {
-    baseURL: 'http://127.0.0.1:5173',
+    baseURL,
     trace: 'retain-on-failure',
   },
   projects: [
@@ -20,15 +22,15 @@ export default defineConfig({
       reuseExistingServer: false,
     },
     {
-      command: 'npm run dev -- --port 5173 --strictPort',
-      url: 'http://127.0.0.1:5173',
+      command: 'npm run dev -- --port 5174 --strictPort',
+      url: baseURL,
       reuseExistingServer: false,
       env: {
         VITE_COGNITO_AUTHORITY: 'http://127.0.0.1:18082',
         VITE_COGNITO_DOMAIN: 'http://127.0.0.1:18082',
         VITE_COGNITO_CLIENT_ID: 'frontend-test',
-        VITE_AUTH_REDIRECT_URI: 'http://127.0.0.1:5173/auth/callback',
-        VITE_AUTH_LOGOUT_URI: 'http://127.0.0.1:5173/login',
+        VITE_AUTH_REDIRECT_URI: `${baseURL}/auth/callback`,
+        VITE_AUTH_LOGOUT_URI: `${baseURL}/login`,
       },
     },
   ],
