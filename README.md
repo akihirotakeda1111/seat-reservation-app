@@ -107,6 +107,16 @@ docker compose logs -f backend frontend postgres
 
 Frontendの`src`など、Composeでマウントしたファイルの変更はViteが反映する。Windowsでファイル変更を検知しない場合は、`VITE_USE_POLLING=true`を環境変数で指定して再起動する（座席情報の定期更新とは別の設定）。Backendや依存関係を変更した場合は、上記の起動コマンドを再実行して再ビルドする。
 
+### 一括停止
+
+```sh
+docker compose down
+```
+
+予約データはボリュームに保持される。データを破棄して初期状態に戻す場合のみ、`docker compose down --volumes`を実行してから再起動する。
+
+Composeのビルドではテストを実行しない。開発・検証手順は[Frontend README](frontend/README.md)と[Backend README](backend/README.md)を参照。
+
 ### Cognitoを使わない固定ユーザーでの操作
 
 開発用の専用Composeで、認証を省略して予約・管理者機能を操作できる。Cognitoの設定は不要。
@@ -129,16 +139,6 @@ docker compose -f compose.demo.yml up -d --wait
 通常構成と同じポートを使うため、切替前に起動中の構成を停止する。同時起動する場合は`FRONTEND_PORT`・`BACKEND_PORT`・`POSTGRES_PORT`を分ける。DBは`seat-reservation-demo`プロジェクト専用ボリュームに保存し、Cognito用とは共有しない。
 
 固定ユーザーモードはローカル操作確認専用。JWT署名検証・Cognitoログイン／ログアウトの確認には通常の`compose.yml`を使う。ポートはループバックのみへ公開し、この構成を外部公開しない。
-
-### 一括停止
-
-```sh
-docker compose down
-```
-
-予約データはボリュームに保持される。データを破棄して初期状態に戻す場合のみ、`docker compose down --volumes`を実行してから再起動する。
-
-Composeのビルドではテストを実行しない。開発・検証手順は[Frontend README](frontend/README.md)と[Backend README](backend/README.md)を参照。
 
 ## 開発ロードマップ
 
