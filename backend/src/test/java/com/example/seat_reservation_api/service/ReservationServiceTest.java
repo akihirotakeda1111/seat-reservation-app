@@ -28,6 +28,9 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.util.UUID;
 import java.util.List;
+import java.util.stream.Stream;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -96,10 +99,11 @@ class ReservationServiceTest {
     @Nested
     @DisplayName("予約登録")
     class ReserveTest {
-        @Test
-        void 予約を保存し採番IDを返す() {
+        @ParameterizedTest(name = "基準日から{0}日後の予約を保存する")
+        @ValueSource(ints = {0, 1, 365})
+        void 予約を保存し採番IDを返す(int offsetDays) {
             UUID savedId = UUID.randomUUID();
-            LocalDate date = LocalDate.of(2026, 10, 1);
+            LocalDate date = LocalDate.now(clock).plusDays(offsetDays);
             String userId = "demo-user-1";
             Short seatNumber = 1;
 
@@ -120,6 +124,60 @@ class ReservationServiceTest {
             assertThat(actual.getUserId()).isEqualTo(userId);
             assertThat(actual.getSeatNumber()).isEqualTo(seatNumber);
             assertThat(actual.getReservationDate()).isEqualTo(date);
+        }
+
+        @ParameterizedTest(name = "{0}日前の予約は拒否する")
+        @ValueSource(ints = {1, 30})
+        void 過去日はRepositoryを呼ばず拒否する(int daysAgo) {
+            assertThatThrownBy(() -> service.reserve(LocalDate.now(clock).minusDays(daysAgo),
+                    "demo-user-1", (short) 1))
+                    .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
+                        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+                        assertThat(exception.getReason()).isEqualTo("リクエストの内容が不正です。");
+                    });
+            verifyNoInteractions(seatRepository, reservationRepository);
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("dateRolloverCases")
+        void 日本時間で日付が切り替わる(String description, Instant currentInstant,
+                LocalDate reservationDate, boolean allowed) {
+            Clock boundaryClock = Clock.fixed(currentInstant, ZoneId.of("Asia/Tokyo"));
+            ReservationService boundaryService =
+                    new ReservationService(reservationRepository, seatRepository, boundaryClock);
+
+            if (allowed) {
+                UUID savedId = UUID.randomUUID();
+                when(seatRepository.existsById((short) 1)).thenReturn(true);
+                Reservation saved = mock(Reservation.class);
+                when(saved.getId()).thenReturn(savedId);
+                when(reservationRepository.save(any(Reservation.class))).thenReturn(saved);
+
+                assertThat(boundaryService.reserve(reservationDate, "demo-user-1", (short) 1))
+                        .isEqualTo(savedId);
+                ArgumentCaptor<Reservation> captor = ArgumentCaptor.forClass(Reservation.class);
+                verify(reservationRepository).save(captor.capture());
+                assertThat(captor.getValue().getReservationDate()).isEqualTo(reservationDate);
+            } else {
+                assertThatThrownBy(() -> boundaryService.reserve(reservationDate, "demo-user-1", (short) 1))
+                        .isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
+                            assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+                            assertThat(exception.getReason()).isEqualTo("リクエストの内容が不正です。");
+                        });
+                verifyNoInteractions(seatRepository, reservationRepository);
+            }
+        }
+
+        static Stream<Arguments> dateRolloverCases() {
+            Instant beforeMidnight = Instant.parse("2026-10-09T14:59:59Z");
+            Instant atMidnight = Instant.parse("2026-10-09T15:00:00Z");
+            LocalDate october9 = LocalDate.of(2026, 10, 9);
+            LocalDate october10 = LocalDate.of(2026, 10, 10);
+            return Stream.of(
+                    Arguments.of("直前：10月9日は当日なので予約可能", beforeMidnight, october9, true),
+                    Arguments.of("直後：10月9日は過去日なので予約不可", atMidnight, october9, false),
+                    Arguments.of("直前：10月10日は翌日なので予約可能", beforeMidnight, october10, true),
+                    Arguments.of("直後：10月10日は当日なので予約可能", atMidnight, october10, true));
         }
 
         @Test

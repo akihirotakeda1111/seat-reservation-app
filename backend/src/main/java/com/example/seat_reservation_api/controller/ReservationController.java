@@ -1,8 +1,6 @@
 package com.example.seat_reservation_api.controller;
 
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -14,7 +12,6 @@ import org.springframework.http.ResponseEntity;
 
 import com.example.seat_reservation_api.entity.Reservation;
 import com.example.seat_reservation_api.service.ReservationService;
-import com.example.seat_reservation_api.validation.Validation;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -25,7 +22,6 @@ import com.example.seat_reservation_api.dto.request.SeatsRequest;
 import com.example.seat_reservation_api.dto.response.ReservationsResponse;
 import com.example.seat_reservation_api.dto.response.SeatResponse;
 import com.example.seat_reservation_api.dto.response.SeatsResponse;
-import java.time.Clock;
 import java.time.LocalDate;
 import java.util.UUID;
 import java.net.URI;
@@ -34,16 +30,13 @@ import java.net.URI;
 @RequestMapping("/api")
 public class ReservationController {
 
-    private final Clock clock;
-
     private final ReservationService reservationService;
     private final CurrentUserProvider currentUserProvider;
 
     public ReservationController(ReservationService reservationService,
-            CurrentUserProvider currentUserProvider, Clock clock) {
+            CurrentUserProvider currentUserProvider) {
         this.reservationService = reservationService;
         this.currentUserProvider = currentUserProvider;
-        this.clock = clock;
     }
 
     @GetMapping("/seats")
@@ -66,17 +59,6 @@ public class ReservationController {
         String userId = currentUserProvider.getUserId();
         LocalDate date = request.date();
         short seatNumber = request.seatNumber();
-
-        try {
-            if (Validation.isInvalidDate(date, clock)) {
-                throw new Exception();
-            }
-            if (Validation.isInvalidSeatNumber(seatNumber)) {
-                throw new Exception();
-            }
-        } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "リクエストの内容が不正です。", e);
-        }
 
         UUID reservationId = reservationService.reserve(date, userId, seatNumber);
 

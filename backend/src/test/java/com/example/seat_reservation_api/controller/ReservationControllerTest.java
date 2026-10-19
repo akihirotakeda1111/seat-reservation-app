@@ -6,7 +6,6 @@ import com.example.seat_reservation_api.support.TestJwtSupport;
 import com.example.seat_reservation_api.component.JwtCurrentUserProvider;
 import com.example.seat_reservation_api.config.SecurityConfig;
 import com.example.seat_reservation_api.config.SecurityErrorConfig;
-import com.example.seat_reservation_api.config.ValidationConfig;
 import com.example.seat_reservation_api.entity.Reservation;
 import com.example.seat_reservation_api.exception.GlobalExceptionHandler;
 import com.example.seat_reservation_api.exception.InvalidSeatException;
@@ -35,7 +34,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -57,8 +55,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(ReservationController.class)
 @ActiveProfiles("local")
 @Import({ GlobalExceptionHandler.class, SeatCacheControlFilter.class, JwtCurrentUserProvider.class,
-                SecurityConfig.class, SecurityErrorConfig.class,
-                ValidationConfig.class, ReservationControllerTest.FixedClockConfig.class })
+                SecurityConfig.class, SecurityErrorConfig.class, ReservationControllerTest.TestSecurityConfig.class })
 class ReservationControllerTest extends JwtAuthenticatedTest {
 
         @Autowired
@@ -75,12 +72,7 @@ class ReservationControllerTest extends JwtAuthenticatedTest {
 
         @TestConfiguration(proxyBeanMethods = false)
         @EnableWebSecurity
-        static class FixedClockConfig {
-
-                @Bean
-                Clock clock() {
-                        return FIXED_CLOCK;
-                }
+        static class TestSecurityConfig {
         }
 
         @Nested
@@ -261,7 +253,6 @@ class ReservationControllerTest extends JwtAuthenticatedTest {
 
                 static Stream<Arguments> invalidCreateReservationCases() {
                         LocalDate futureDate = LocalDate.now(FIXED_CLOCK).plusDays(1);
-                        LocalDate pastDate = LocalDate.now(FIXED_CLOCK).minusDays(1);
                         String validUser = "demo-user-1";
 
                         return Stream.of(Arguments.of("本文未指定", "", validUser),
@@ -275,8 +266,6 @@ class ReservationControllerTest extends JwtAuthenticatedTest {
                                                         """, validUser), Arguments.of("存在しない日付", """
                                                         {"date": "2026-10-32", "seatNumber": 1}
                                                         """, validUser),
-                                        Arguments.of("過去日", reservationBody(pastDate, 1),
-                                                        validUser),
                                         Arguments.of("座席番号未指定", """
                                                         {"date": "%s"}
                                                         """.formatted(futureDate), validUser),
@@ -290,6 +279,23 @@ class ReservationControllerTest extends JwtAuthenticatedTest {
                                         Arguments.of("座席番号が数値に変換できない文字列", """
                                                         {"date": "%s", "seatNumber": "abc"}
                                                         """.formatted(futureDate), validUser));
+                }
+
+                @Test
+                void 過去日の拒否なら400() throws Exception {
+                        LocalDate date = LocalDate.now(FIXED_CLOCK).minusDays(1);
+                        String userId = "demo-user-1";
+                        short seatNumber = 1;
+                        when(service.reserve(date, userId, seatNumber))
+                                        .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                                        "リクエストの内容が不正です。"));
+
+                        mockMvc.perform(createReservationRequest(reservationBody(date, seatNumber), userId))
+                                        .andExpectAll(problem(HttpStatus.BAD_REQUEST,
+                                                        "リクエストの内容が不正です。", RESERVATIONS_PATH));
+
+                        verify(service).reserve(date, userId, seatNumber);
+                        verify(service, never()).getReservationById(any());
                 }
 
                 @Test

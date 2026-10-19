@@ -16,7 +16,7 @@
 
 | 項目 | 現行実装・確認点 |
 | --- | --- |
-| 予約登録 | `ReservationService.reserve()`が`@Transactional`。座席存在確認後に`save()`。空席の事前確認は行っていない |
+| 予約登録 | `ReservationService.reserve()`が`@Transactional`。過去日判定・座席存在確認後に`save()`。空席の事前確認は行っていない |
 | キャンセル | `cancelOwnReservation()`が`@Transactional`で明示DELETEの`deleteReservationById()`を実行。削除件数0は`ReservationNotFoundException`。予約取得・所有者確認・過去日確認もServiceの同一Transaction内にある。管理者用はcancelReservationAsAdminで所有者確認だけを省略する |
 | 一意性 | Flywayで`uq_reservations_date_seat`：`UNIQUE (reservation_date, seat_number)`を定義 |
 | 例外変換 | `GlobalExceptionHandler`は`ReservationNotFoundException`を404、対象UNIQUE制約の`DataIntegrityViolationException`を409へ変換。それ以外のDB整合性エラー・想定外例外は500 |

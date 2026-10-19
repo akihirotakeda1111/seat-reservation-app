@@ -45,6 +45,9 @@ public class ReservationService {
 
     @Transactional
     public UUID reserve(LocalDate date, String userId, short seatNumber) {
+        if (Validation.isInvalidDate(date, clock)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "リクエストの内容が不正です。");
+        }
         if (!seatRepository.existsById(seatNumber)) {
             throw new InvalidSeatException();
         }

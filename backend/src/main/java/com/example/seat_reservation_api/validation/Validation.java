@@ -13,8 +13,4 @@ public class Validation {
         LocalDate today = LocalDate.now(clock);
         return date == null || date.isBefore(today);
     }
-
-    public static boolean isInvalidSeatNumber(Short seatId) {
-        return seatId == null || seatId < 1;
-    }
 }
