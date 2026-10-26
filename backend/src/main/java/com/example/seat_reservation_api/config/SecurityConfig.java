@@ -40,6 +40,7 @@ public class SecurityConfig {
                                 .httpBasic(basic -> basic.disable())
                                 .logout(logout -> logout.disable())
                                 .authorizeHttpRequests(auth -> auth
+                                                .requestMatchers(org.springframework.http.HttpMethod.GET, "/actuator/health").permitAll()
                                                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                                                 .requestMatchers("/api/**").authenticated()
                                                 .anyRequest().denyAll())

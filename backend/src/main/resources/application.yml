@@ -12,3 +12,12 @@ spring:
 app:
   security:
     cognito-client-id: ${COGNITO_CLIENT_ID}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
