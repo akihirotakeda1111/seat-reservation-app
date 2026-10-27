@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Test and package
+        run: sh ./mvnw -B -ntp verify
+      - name: Build Docker image
+        run: docker build --tag seat-reservation-app:ci .
+      - name: Save test reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-reports
+          path: backend/target/surefire-reports/
+          retention-days: 7
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm test
+      - name: Check types and build
+        run: npm run build
+
+  browser:
+    name: Browser (${{ matrix.suite }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [e2e, integration]
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-java@v6
+        if: matrix.suite == 'integration'
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Prepare Maven wrapper for integration tests
+        if: matrix.suite == 'integration'
+        run: chmod +x ../backend/mvnw
+      - run: npm ci
+      - run: npx playwright install --with-deps chrome
+      - name: Run browser tests
+        run: npm run test:${{ matrix.suite }} -- --workers=1 --forbid-only
+      - name: Save browser diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-${{ matrix.suite }}-results
+          path: frontend/test-results/
+          retention-days: 7
+
+  terraform:
+    name: Terraform (${{ matrix.directory }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        directory: [terraform, terraform/bootstrap]
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+    defaults:
+      run:
+        working-directory: ${{ matrix.directory }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.14.7"
+          terraform_wrapper: false
+      - name: Check formatting
+        run: terraform fmt -check -recursive
+      - name: Initialize without remote state
+        run: terraform init -backend=false -lockfile=readonly
+      - run: terraform validate -no-color
+      - name: Run mock provider tests
+        if: matrix.directory == 'terraform'
+        run: terraform test -no-color
