@@ -93,14 +93,19 @@ CIはGitHub-hosted Runnerで実行する。
 2. 依存関係をインストールする。
 3. テストとビルドを実行する。
 
-### 4.3 CI設定の記載枠
+### 4.3 CI設定
 
-| 設定項目 | 状態 | 記載欄 |
-|---|---|---|
-| RunnerのOS・イメージ | 未確定 | — |
-| JDK・Node.jsのバージョン指定 | 未確定 | — |
-| Backendのビルド・テスト実行コマンド | 未確定 | — |
-| Frontendの依存関係インストール・テスト・ビルド実行コマンド | 未確定 | — |
+| 設定項目 | 内容 |
+|---|---|
+| Runner | Ubuntu 24.04 |
+| ツール | Temurin JDK 25、Node.js 24、Terraform 1.14.7 |
+| Backend | `sh ./mvnw -B -ntp verify`成功後、`backend`で`docker build --tag seat-reservation-app:ci .`を実行。イメージのPush・起動は行わない |
+| Frontend | `npm ci`、`npm run format:check`、`npm test`、`npm run build` |
+| ブラウザテスト | Chromeをインストールし、`test:e2e`と`test:integration`を別Runnerで実行。各1 worker、`--forbid-only`指定 |
+| Terraform | root・bootstrapで`fmt -check -recursive`、`init -backend=false -lockfile=readonly`、`validate`。rootで`test`（AWSモック） |
+| 権限 | `contents: read`。AWS認証・Stateへの接続なし |
+| 実行上限 | Backend・ブラウザ各20分、Frontend・Terraform各10分 |
+| 診断情報 | Surefireレポート、Playwrightの失敗時trace・結合テストAPIログをArtifactsに7日間保存 |
 
 ## 5. アプリケーションCD設計
 
