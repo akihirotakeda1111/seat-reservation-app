@@ -1,1 +1,10 @@
 .env
+.tools/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+terraform/terraform.tfvars
+terraform/backend.hcl
+terraform/bootstrap/terraform.tfvars

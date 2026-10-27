@@ -1,0 +1,22 @@
+public_hostname = "seat-reservation-app.example.com"
+origin_hostname = "origin-seat-reservation-app.example.com"
+# Existing, manually DNS-validated certificates. Replace with your actual ARNs.
+cloudfront_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-0000-0000-000000000001"
+alb_certificate_arn = "arn:aws:acm:ap-northeast-1:123456789012:certificate/00000000-0000-0000-0000-000000000002"
+
+# Initial infrastructure creation: no image or Cognito configuration required yet.
+desired_count = 0
+image_digest = null
+
+# Keep false for bootstrap and the first real-image deployment.
+# Set true only after confirming that a real-image deployment completed successfully.
+rollback_enabled = false
+
+# Linux Fargate CPU units, memory in MiB, and startup grace period in seconds.
+task_cpu = 256
+task_memory = 1024
+health_check_grace_period_seconds = 300
+
+# Before starting a task, set these and the digest, then change desired_count to 1.
+cognito_issuer_uri = ""
+cognito_client_id = ""
