@@ -12,9 +12,24 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  build-backend:
+    needs: [backend, frontend, browser, terraform]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.AWS_ENV_ENABLED == 'true'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/build-backend.yml
+
+  build-frontend:
+    needs: [backend, frontend, browser, terraform]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.FRONTEND_BUILD_ENABLED == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-frontend.yml
+
   backend:
     name: Backend
     runs-on: ubuntu-24.04
@@ -63,6 +78,8 @@ jobs:
       - run: npm ci
       - run: npm run format:check
       - run: npm test
+      - name: Test release configuration validation
+        run: node --test ../.github/scripts/validate-frontend-env.test.mjs
       - name: Check types and build
         run: npm run build
 

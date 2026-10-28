@@ -20,3 +20,11 @@ health_check_grace_period_seconds = 300
 # Before starting a task, set these and the digest, then change desired_count to 1.
 cognito_issuer_uri = ""
 cognito_client_id = ""
+
+# Enable ECR Push from GitHub Actions after setting the actual owner/repository.
+github_repository = ""
+# Obtain numeric IDs with: gh api repos/OWNER/REPOSITORY --jq '{owner_id: .owner.id, repository_id: .id}'
+github_owner_id = ""
+github_repository_id = ""
+# Reuse an existing account-wide provider when present; otherwise Terraform creates one.
+github_oidc_provider_arn = null
