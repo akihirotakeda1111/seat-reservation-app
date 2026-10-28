@@ -45,7 +45,7 @@ jobs:
           {
             echo '### Frontend release (not deployed)'
             printf 'Commit: `%s`\n\n' "$GITHUB_SHA"
-            echo 'Download the frontend-release artifact, verify SHA256SUMS, and deploy frontend.tar.gz manually. Do not rebuild locally.'
+            echo 'Run Deploy release with this CI run ID for both initial and subsequent releases. No per-release Terraform apply or local rebuild is required.'
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:

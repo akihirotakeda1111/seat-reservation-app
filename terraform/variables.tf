@@ -74,12 +74,12 @@ variable "desired_count" {
     condition     = contains([0, 1], var.desired_count)
     error_message = "desired_count must be 0 (stopped/bootstrap) or 1 (running)."
   }
-  description = "0 for bootstrap; 1 after pushing an image and configuring Cognito."
+  description = "Creation-time task count. Keep 0 for CD-managed startup; later changes are ignored."
   type        = number
   default     = 0
 }
 variable "image_digest" {
-  description = "Pushed ECR image digest. Null is allowed only while desired_count is 0."
+  description = "Optional baseline image digest. Leave null for CD-managed releases; CD selects the release image."
   type        = string
   nullable    = true
   default     = null

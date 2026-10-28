@@ -1,0 +1,53 @@
+name: Deploy release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_run_id:
+        description: Successful main CI run ID containing both release artifacts
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    environment: dev
+    timeout-minutes: 45
+    env:
+      AWS_REGION: ap-northeast-1
+      AWS_PAGER: ""
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_RUN_ID: ${{ inputs.release_run_id }}
+      DEPLOYMENT_PARAMETER_NAME: ${{ vars.DEPLOYMENT_PARAMETER_NAME }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Download and verify release provenance
+        run: python .github/scripts/deploy.py download
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Deploy backend and frontend
+        run: python .github/scripts/deploy.py deploy
+      - name: Save deployment record
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-${{ github.run_id }}-${{ github.run_attempt }}
+          path: deployment-record.json
+          retention-days: 30

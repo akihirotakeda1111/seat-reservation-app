@@ -30,10 +30,6 @@ variable "certificate_arn" {
 }
 
 variable "application" {
-  validation {
-    condition     = !var.deployment.rollback_enabled || var.application.image_digest != null
-    error_message = "Rollback cannot be enabled for the bootstrap image. Confirm a successful real-image deployment before enabling rollback."
-  }
   description = "Container image, authentication, and health endpoint settings."
   nullable    = false
   type = object({
@@ -45,12 +41,18 @@ variable "application" {
   })
   default = {}
   validation {
+    condition = (var.application.cognito_issuer_uri == "" && var.application.cognito_client_id == "") || (
+      can(regex("^https://cognito-idp\\.[^/]+/[^/]+$", var.application.cognito_issuer_uri)) && length(trimspace(var.application.cognito_client_id)) > 0
+    )
+    error_message = "Configure both Cognito issuer and client ID, or leave both empty until CD setup."
+  }
+  validation {
     condition     = var.application.image_digest == null ? true : can(regex("^sha256:[a-f0-9]{64}$", var.application.image_digest))
     error_message = "image_digest must be a sha256 digest."
   }
   validation {
-    condition     = var.deployment.desired_count == 0 || (var.application.image_digest != null && can(regex("^https://cognito-idp\\.[^/]+/[^/]+$", var.application.cognito_issuer_uri)) && length(trimspace(var.application.cognito_client_id)) > 0)
-    error_message = "Starting a task requires an image digest and existing Cognito issuer/client ID."
+    condition     = (var.deployment.desired_count == 0 && var.application.image_digest == null) || (var.application.image_digest != null && can(regex("^https://cognito-idp\\.[^/]+/[^/]+$", var.application.cognito_issuer_uri)) && length(trimspace(var.application.cognito_client_id)) > 0)
+    error_message = "Preparing a real-image task definition requires existing Cognito issuer/client ID."
   }
   validation {
     condition     = var.application.container_port >= 1 && var.application.container_port <= 65535 && floor(var.application.container_port) == var.application.container_port && startswith(var.application.health_check_path, "/")

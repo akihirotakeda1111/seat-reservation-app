@@ -1,5 +1,6 @@
 .env
 .tools/
+**/__pycache__/
 **/.terraform/
 *.tfstate
 *.tfstate.*

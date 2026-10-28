@@ -17,7 +17,7 @@ task_cpu = 256
 task_memory = 1024
 health_check_grace_period_seconds = 300
 
-# Before starting a task, set these and the digest, then change desired_count to 1.
+# Configure Cognito and apply Terraform before the first CD run.
 cognito_issuer_uri = ""
 cognito_client_id = ""
 

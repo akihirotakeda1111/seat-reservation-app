@@ -68,6 +68,8 @@ resource "aws_ecs_cluster" "app" {
 }
 
 resource "aws_ecs_task_definition" "app" {
+  # Preserve revisions used by running services and rollback after baseline updates.
+  skip_destroy             = true
   family                   = "${local.name_prefix}-app"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
@@ -113,6 +115,11 @@ resource "aws_ecs_task_definition" "app" {
 }
 
 resource "aws_ecs_service" "app" {
+  lifecycle {
+    # CD registers a release revision and starts one task, including the first release.
+    ignore_changes = [task_definition, desired_count]
+  }
+
   name                               = "${local.name_prefix}-app"
   cluster                            = aws_ecs_cluster.app.id
   task_definition                    = aws_ecs_task_definition.app.arn

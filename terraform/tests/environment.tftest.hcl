@@ -144,7 +144,7 @@ run "normal_deployment_with_rollback_and_custom_size" {
     error_message = "Task sizing and startup grace must use deployment inputs."
   }
 }
-run "reject_bootstrap_rollback" {
+run "allow_rollback_with_cd_managed_image" {
   command = plan
   module { source = "./container-web" }
   variables {
@@ -154,7 +154,10 @@ run "reject_bootstrap_rollback" {
     certificate_arn = "arn:aws:acm:ap-northeast-1:123456789012:certificate/00000000-0000-0000-0000-000000000000"
     deployment      = { rollback_enabled = true }
   }
-  expect_failures = [var.application]
+  assert {
+    condition     = aws_ecs_service.app.deployment_circuit_breaker[0].rollback
+    error_message = "Rollback must not depend on the placeholder image in the Terraform baseline."
+  }
 }
 
 run "reject_invalid_task_size" {
@@ -206,6 +209,19 @@ run "reject_missing_cognito" {
     certificate_arn = "arn:aws:acm:ap-northeast-1:123456789012:certificate/00000000-0000-0000-0000-000000000000"
     deployment      = { desired_count = 1 }
     application     = { image_digest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" }
+  }
+  expect_failures = [var.application]
+}
+
+run "reject_partial_cognito_for_cd_baseline" {
+  command = plan
+  module { source = "./container-web" }
+  variables {
+    project_name    = "seat-reservation-app"
+    environment     = "dev"
+    aws_region      = "ap-northeast-1"
+    certificate_arn = "arn:aws:acm:ap-northeast-1:123456789012:certificate/00000000-0000-0000-0000-000000000000"
+    application     = { cognito_client_id = "client" }
   }
   expect_failures = [var.application]
 }

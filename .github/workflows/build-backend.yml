@@ -46,13 +46,12 @@ jobs:
           mkdir -p release
           jq -n --arg commit "$GITHUB_SHA" --arg tag "$tag" --arg image "$REPOSITORY_URL@$digest" --arg digest "$digest" \
             '{commit: $commit, tag: $tag, image_uri: $image, image_digest: $digest}' > release/backend.json
-          printf 'desired_count = 1\nimage_digest = "%s"\n' "$digest" > release/backend.tfvars.example
           {
             echo '### Backend release (not deployed)'
             printf 'Commit: `%s`\n\nImage: `%s@%s`\n\n' "$GITHUB_SHA" "$REPOSITORY_URL" "$digest"
-            echo 'Copy the following values into terraform/terraform.tfvars, review plan, then apply manually.'
+            echo 'Run Deploy release with this CI run ID. CD registers the image and starts one task for both initial and subsequent releases; no per-release Terraform apply is required.'
             echo '```hcl'
-            cat release/backend.tfvars.example
+            cat release/backend.json
             echo '```'
             echo 'Keep rollback_enabled = false for the first deployment.'
           } >> "$GITHUB_STEP_SUMMARY"

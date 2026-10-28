@@ -80,6 +80,8 @@ jobs:
       - run: npm test
       - name: Test release configuration validation
         run: node --test ../.github/scripts/validate-frontend-env.test.mjs
+      - name: Test deployment safeguards
+        run: python3 -m unittest discover -s ../.github/scripts -p 'test_deploy.py'
       - name: Check types and build
         run: npm run build
 
