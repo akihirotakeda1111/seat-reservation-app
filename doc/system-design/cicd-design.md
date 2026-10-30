@@ -109,7 +109,7 @@ CIはGitHub-hosted Runnerで実行する。
 | ツール | Temurin JDK 25、Node.js 24、Terraform 1.14.7、RunnerのPython 3 |
 | Backend | `sh ./mvnw -B -ntp verify`成功後、`backend`で`docker build --tag seat-reservation-app:ci .`を実行。イメージのPush・起動は行わない |
 | Frontend | `npm ci`、`npm run format:check`、`npm test`、`npm run build`、公開設定検証スクリプトのテスト |
-| デプロイ処理テスト | Frontendジョブで`test_deploy.py`を実行。成果物検証、基本定義の保持、起動・更新、失敗判定をモックで検証し、AWSへは接続しない |
+| デプロイ処理テスト | Frontendジョブで`test_deploy.py`を実行。成果物検証、基本定義の保持、起動・更新、更新反映待ち、失敗判定・記録をモックで検証し、AWSへは接続しない |
 | ブラウザテスト | Chromeをインストールし、`test:e2e`と`test:integration`を別Runnerで実行。各1 worker、`--forbid-only`指定 |
 | Terraform | root・bootstrapで`fmt -check -recursive`、`init -backend=false -lockfile=readonly`、`validate`。rootで`test`（AWSモック） |
 | 検証ジョブの権限 | `contents: read`。AWS認証・Stateへの接続なし。成果物準備・デプロイの権限は3.2を参照 |
@@ -134,7 +134,7 @@ CIはGitHub-hosted Runnerで実行する。
 | ECS Task Definitionの更新方法 | 基本定義はTerraform管理。CDはSSMのARNで基本定義を取得し、成果物のイメージへ差し替えて`-release` familyに登録。Serviceへ定義と1台を同時指定。`task_definition`・`desired_count`はignore_changes対象 |
 | ECSへのアプリケーション設定の注入方法 | DB接続先・Cognitoは環境変数、DB認証情報はSecrets Managerから起動時に注入 |
 | デプロイの稼働確認・失敗判定 | CDで指定revision・digest・ALB Healthyを確認。起動猶予は既定300秒。サーキットブレーカーで失敗を検出 |
-| Actionsでの待機時間・失敗判定・再試行 | Backend成果物準備は上限25分。デプロイ全体は45分、ECS待機は20分。指定revision・digest・ALB Healthyを確認し、旧revisionへのロールバックは失敗扱い |
+| Actionsでの待機時間・失敗判定・再試行 | Backend成果物準備は上限25分。デプロイ全体は45分、ECS待機は20分（更新対象デプロイが参照結果に現れるまでの最大60秒を含む）。指定デプロイ・revision・digest・ALB Healthyを確認し、ロールバックや別デプロイへの置換は失敗扱い |
 
 基本定義の正確なARNと配置先はTerraformからSSMへ保存する。リリース情報の保持期間は30日。デプロイにはPython 3.13を使用する。ECS更新には停止時間が発生する。
 

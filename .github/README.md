@@ -54,7 +54,7 @@ gh api repos/OWNER/REPOSITORY --jq '{owner_id: .owner.id, repository_id: .id}'
 CDは最新attemptの成果物を検証し、リリース用タスク定義登録 → ECSを1台で起動・更新 → Backend正常性確認 → S3配置 → CloudFrontキャッシュ削除 → 公開URL確認を行う。再ビルド・Terraform実行は行わない。同一環境のデプロイは直列実行し、上限は45分。
 
 - **初回成功後**：ログイン・予約・キャンセルを確認し、Terraformで`rollback_enabled=true`へ変更する。初回には正常稼働していたアプリの復旧先がない。
-- **失敗時**：ステップログを確認する。タスク定義登録以降は`deployment-*` Artifact・Summaryにも結果が残る。Backendのロールバックは失敗扱いとし、Frontend更新へ進まない。Frontend失敗時の全体自動ロールバックは行わない。
+- **失敗時**：ステップログと`deployment-*` Artifact・Summaryを確認する。成果物取得・AWS認証・事前チェックの失敗も記録対象とする。記録条件と復旧方法は[障害調査・復旧手順](../terraform/TROUBLESHOOTING.md)を参照。
 - **復旧時**：原因修正後に再実行するか、保持期間内の以前の成功CI実行IDを指定する。現在の基本設定と以前のアプリを組み合わせるため、設定・DBとの互換性を確認する。DBは自動で戻らない。期限切れ成果物は別途手動復旧が必要。
 - **設定変更時**：CPU・メモリ・Backend環境変数はTerraformで基本定義を更新してからCDを実行する。Frontend環境変数は成果物を再作成する。
 

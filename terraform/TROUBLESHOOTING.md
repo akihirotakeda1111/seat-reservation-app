@@ -9,7 +9,9 @@
 | CI・成果物準備の失敗 | Actionsの失敗ステップを確認し、原因修正後にCIを再実行。片方の成果物だけ成功していてもデプロイしない |
 | デプロイのスキップ | 実行ブランチがmain、Repository Variableの`DEPLOY_ENABLED`が`true`か確認 |
 | AWS認証・事前チェックの失敗 | 該当ステップのログを確認。認証では`dev`の`AWS_DEPLOY_ROLE_ARN`とOIDC信頼条件、SSM取得では`DEPLOYMENT_PARAMETER_NAME`を確認 |
-| タスク定義登録以降の失敗 | `deployment-*` Artifact・Summaryとステップログを確認。CI実行ID、コミット、以前／今回のタスク定義、処理結果を参照する。Artifactの保持期間は30日 |
+| デプロイ処理の失敗 | 成果物取得・AWS認証・事前チェック・配置・公開確認が記録対象。`deployment-*` Artifact・Summaryの`stage`・`status`・エラー概要を確認し、詳細は失敗ステップのログで調べる。Artifactの保持期間は30日 |
+
+CI実行ID・コミット・以前／今回のタスク定義などは、取得できた情報から順次記録する。checkout失敗、キャンセル、ジョブのタイムアウトなどでは、Artifact・Summaryが残らない場合がある。
 
 CDが失敗・タイムアウトしても、AWS側で処理が続いている場合がある。再実行前にECSのデプロイ状態を確認する。
 
@@ -42,6 +44,8 @@ dig "$app_domain" A
 ```
 
 ## ECSのヘルスチェック失敗・Terraformの待機タイムアウト
+
+CDはECS更新後、対象デプロイが参照結果に現れるまで最大60秒待機する。`ECS update was not observed within 60 seconds`で失敗した場合も、以下のコマンドでECSの実状態を確認してから再実行する。この反映待ちはECS待機上限20分に含む。
 
 CD・Terraformの待機タイムアウトはAWS側の処理を取り消さない。ECSサービスのイベント・停止タスクの理由・CloudWatchのアプリログを確認する。終了コード143は通常停止要求による終了であり、原因はその前のヘルスチェックや起動ログから調べる。起動猶予の既定値は300秒。
 

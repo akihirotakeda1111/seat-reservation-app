@@ -31,19 +31,32 @@ jobs:
       DEPLOYMENT_PARAMETER_NAME: ${{ vars.DEPLOYMENT_PARAMETER_NAME }}
     steps:
       - uses: actions/checkout@v6
+        id: checkout
         with:
           persist-credentials: false
       - uses: actions/setup-python@v6
+        id: python
         with:
           python-version: "3.13"
       - name: Download and verify release provenance
+        id: download
         run: python .github/scripts/deploy.py download
       - uses: aws-actions/configure-aws-credentials@v6.3.0
+        id: auth
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
       - name: Deploy backend and frontend
+        id: deploy
         run: python .github/scripts/deploy.py deploy
+      - name: Finalize deployment record
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        env:
+          SETUP_OUTCOME: ${{ steps.python.outcome }}
+          DOWNLOAD_OUTCOME: ${{ steps.download.outcome }}
+          AUTH_OUTCOME: ${{ steps.auth.outcome }}
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+        run: python3 .github/scripts/deploy.py finalize
       - name: Save deployment record
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
