@@ -107,7 +107,7 @@ Subnet CIDRはVPC CIDRの範囲内で重複しないように設定する。
 |---|---|---|
 | Browser | CloudFront | HTTPS |
 | CloudFront | S3 | HTTPS / OAC |
-| CloudFront | Internal ALB | HTTPS / VPC Origins / ACM |
+| CloudFront | Internal ALB | HTTPS:443 / VPC Origins / ACM |
 | Internal ALB | ECS / Fargate | HTTP |
 | ECS / Fargate | RDS PostgreSQL | PostgreSQL + TLS |
 | ECS / Fargate | AWS公開サービス等 | HTTPS / NAT Gateway / Internet Gateway |
@@ -118,7 +118,7 @@ ECSからCognito JWKS、ECR、CloudWatch Logsなどの必要な公開エンド�
 
 | 対象 | 許可する接続元 |
 |---|---|
-| ALB | CloudFront VPC Originsのみ |
+| ALB | CloudFront VPC Originsの管理Security GroupからHTTPS:443のみ |
 | ECS | ALBのSecurity Groupのみ |
 | RDS | ECSのSecurity Groupのみ |
 
@@ -166,19 +166,21 @@ CognitoのUser Pool、App Client、Groups、Cognito DomainはTerraform管理対�
 | 区分 | 対象 | 管理・削除方針 |
 |---|---|---|
 | 一時リソース | VPC / Subnet / Route Table / Internet Gateway / NAT Gateway / Security Group | Terraformで作成・削除 |
-| 一時リソース | Internal ALB / Target Group / Listener / ECS / Fargate / ECR / RDS PostgreSQL | Terraformで作成・削除 |
+| 一時リソース | Internal ALB / Target Group / Listener / ECS Cluster・Service / ECR / RDS PostgreSQL | Terraformで作成・削除。Serviceの稼働タスク定義とタスク数はCDで更新 |
 | 一時リソース | S3 / CloudFront / VPC Origins / OAC / 必要なIAM Role・Policy / その他アプリケーション稼働用リソース | Terraformで作成・削除 |
 | 手動管理リソース | ACM証明書 / 公開・Origin用DNSレコード / DNS検証レコード | Terraform管理対象外。環境削除・再作成時の公開／Origin用レコードは手動で削除・更新 |
 | 永続リソース | 既存Cognito関連リソース | 手動管理。一時環境のdestroy対象外 |
 | 永続リソース | Terraform State保存先 | 一時環境のdestroy対象外 |
 | 永続リソース | Route 53 Hosted Zone | 一時環境のdestroy対象外 |
 
+基本タスク定義はTerraform、実イメージを指定したリリース用定義（`-release` family）はCDが登録する。Serviceの`task_definition`・`desired_count`は`ignore_changes`対象。基本定義は`skip_destroy=true`、リリース用定義はTerraform管理外のため、destroy後の不要revisionは手動で登録解除する。
+
 ### 9.2 State管理
 
 - Terraform StateはGitリポジトリにコミットしない。
 - State保存先は一時環境と分離して永続管理し、Build & Scrapの削除対象から除外する。
 - Stateには暗号化・アクセス制御・ロックを適用する。
-- GitHub Actionsからアクセス可能とし、必要最小限のIAM権限を付与する。
+- Stateは手動Terraformで使用し、GitHub Actionsにはアクセス権限を付与しない。CDは基本定義のARNと配置先をSSMから取得する。
 - State保存先の初期構築は、一時環境に依存しない方式とする。
 
 `terraform/bootstrap`でState用S3を独立構築し、バージョニング・暗号化・HTTPS強制・削除防止を設定する。Bootstrap自身のStateはローカルで安全に保管する。
@@ -190,7 +192,7 @@ State操作用IAM権限は、対象バケットの`ListBucket`、Stateキーの`
 ### 9.3 Build & Scrap
 
 1. Terraform applyでECRを含む一時AWS環境を構築する。ECS Serviceのタスク数は0とする。
-2. BackendイメージをPushし、digestとCognito設定を指定してタスク数を1にする。Frontend成果物をS3へ配置する。
+2. Cognitoなどの基本設定をTerraformで反映し、CIで成果物を作成する。成功したCI実行IDを指定してCDを起動し、リリース定義登録・1タスク起動・Frontend配置を行う。
 3. 動作を検証する。
 4. Terraform destroyで一時リソースを削除する。
 5. 既存Cognitoと永続リソースが維持されていることを確認する。

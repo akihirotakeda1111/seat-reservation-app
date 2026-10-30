@@ -25,8 +25,6 @@ Java 25 / Spring Boot / Reactを使用した座席予約システム。
 - Amazon Cognitoによるログイン・ログアウト
 - 管理者による指定日の全予約取得と任意ユーザーの予約キャンセル
 
-ログイン後は権限にかかわらず一般予約画面へ進む。`ADMINS`グループの管理者には「予約管理へ」を表示し、管理者画面で一覧取得・キャンセルを行う。一般画面では管理者も自分の予約だけをキャンセルできる。過去日のキャンセルは両画面とも不可。
-
 ## 画面構成
 
 画面イメージと画面構成の詳細は[フロントエンド仕様](doc/system-design/frontend-specification.md)を参照。
@@ -35,7 +33,7 @@ Java 25 / Spring Boot / Reactを使用した座席予約システム。
 
 ## アーキテクチャ
 
-### Phase 1：ローカル環境
+### ローカル環境
 
 ```mermaid
 flowchart LR
@@ -50,14 +48,16 @@ flowchart LR
 
 Frontend・Backend・Databaseをルートの[compose.yml](compose.yml)で一括管理する。
 
-### 最終構成（予定）
+### AWS環境
 
 - Frontend：S3 + CloudFront
-- Backend：ALB + ECS/Fargate（Spring Boot）
+- Backend：Internal ALB + ECS/Fargate（Spring Boot）
 - Database：RDS PostgreSQL
 - Authentication：Amazon Cognito + Spring Security
 - Infrastructure：Terraform
 - CI/CD：GitHub Actions + GitHub OIDC
+
+APIへの通信はCloudFront VPC Origins経由でInternal ALBからECSへ転送する。詳細は[AWSアーキテクチャ設計](doc/system-design/aws-architecture.md)を参照。
 
 ## 技術スタック
 
@@ -65,7 +65,7 @@ Frontend・Backend・Databaseをルートの[compose.yml](compose.yml)で一括�
 | --- | --- |
 | Frontend | React / TypeScript / Vite |
 | Backend | Java 25 / Spring Boot 4.1.1 / Spring MVC / Spring Data JPA |
-| Database・マイグレーション | PostgreSQL 17 / Flyway |
+| Database・マイグレーション | PostgreSQL（ローカル・テスト：17、AWS RDS：16.15）/ Flyway |
 | ビルド・ローカル環境 | Maven Wrapper / Node.js 24 / npm / Docker Compose |
 | Backendテスト | JUnit / Testcontainers |
 | Frontendテスト | Vitest / Testing Library / Playwright |
@@ -140,7 +140,28 @@ docker compose -f compose.demo.yml up -d --wait
 
 固定ユーザーモードはローカル操作確認専用。JWT署名検証・Cognitoログイン／ログアウトの確認には通常の`compose.yml`を使う。ポートはループバックのみへ公開し、この構成を外部公開しない。
 
-## 開発ロードマップ
+## CI/CD
+
+[GitHub Actions](.github/workflows/ci.yml)で、main向けPR・mainへのPush・手動実行時に以下を検証する。
+
+- Backend：Java 25でビルド、単体・認証認可・Testcontainers結合テスト、Dockerイメージのビルド検証（Pushなし）。
+- Frontend：Node.js 24で書式チェック、単体テスト、ビルド、ChromeでのE2E・実API結合テスト。
+- Terraform：書式・構文チェック、AWSモックを使用するテスト。Stateへの接続や実リソースの変更は行わない。
+- リリース処理：公開用Frontend設定の検証テストとデプロイスクリプトのテスト。
+
+上記の検証ジョブにはAWS認証情報・Cognitoの設定は不要。テストレポートとブラウザ診断情報はActionsのArtifactsに7日間保存する。
+
+mainのCIでは検証成功後、有効化したBackendのECR PushとFrontendの公開用成果物保存を行う。この処理にはAWS認証（OIDC）やCognitoなどの公開用設定が必要。Artifactsは30日間保存する。
+
+CDは初回・通常更新ともに、両成果物が揃った成功済みmain CIの実行IDを指定して`Deploy release`を手動起動する。リリース用タスク定義登録・ECS更新・S3配置・正常性確認を自動実行し、通常リリースのTerraform実行は不要。インフラ更新・破棄は手動Terraformで行う。初期設定と実行方法は[CI/CD設定](.github/README.md)を参照。
+
+PRのマージをCI成功に限定する場合は、GitHubのRulesetで本ワークフローの各ジョブを必須チェックに設定する。
+
+## AWS環境
+
+準備・初回デプロイ・更新・破棄の手順は[Terraform README](terraform/README.md)を参照。
+
+## 開発フェーズ
 
 | Phase             | 内容                                                |
 | ----------------- | --------------------------------------------------- |
@@ -158,6 +179,8 @@ docker compose -f compose.demo.yml up -d --wait
 主要な設計判断はADR（Architecture Decision Record）として記録する。
 
 ## 認証・管理者機能
+
+ログイン後は権限にかかわらず一般予約画面へ進む。`ADMINS`グループの管理者には「予約管理へ」を表示し、管理者画面で一覧取得・キャンセルを行う。一般画面では管理者も自分の予約だけをキャンセルできる。過去日のキャンセルは両画面とも不可。
 
 ログイン情報の入力はCognito Managed Loginで行い、アプリはAuthorization Code + PKCEで取得したAccess TokenをAPIへ送信する。BackendがJWTと管理者権限を検証し、一般向けキャンセルでは予約所有者も確認する。
 
@@ -177,6 +200,10 @@ docker compose -f compose.demo.yml up -d --wait
 | --- | --- |
 | Frontend開発・検証 | [Frontend README](frontend/README.md) |
 | Backend開発・検証 | [Backend README](backend/README.md) |
+| AWSデプロイ・更新・破棄 | [Terraform README](terraform/README.md) |
+| CI/CD設定・実行 | [CI/CD設定](.github/README.md) |
+| AWS・CI/CD設計 | [AWSアーキテクチャ設計](doc/system-design/aws-architecture.md)、[CI/CD設計](doc/system-design/cicd-design.md) |
+| 障害調査・復旧 | [TROUBLESHOOTING](terraform/TROUBLESHOOTING.md) |
 | 詳細仕様 | [API定義](doc/system-design/api-definition.md)、[データモデル定義](doc/system-design/data-model.md)、[Frontend仕様](doc/system-design/frontend-specification.md) |
 | 検証項目 | [API結合テスト](doc/testing/api-integration-test-matrix.md)、[Transaction / Concurrencyテスト](doc/testing/transaction-concurrency-test-matrix.md)、[Frontendテスト](doc/testing/frontend-test-matrix.md) |
 
@@ -187,5 +214,5 @@ docker compose -f compose.demo.yml up -d --wait
 - [ADR-003：APIエラーレスポンスの標準化](doc/adr/adr-003.md)
 - [ADR-004：ローカル環境のCompose統合起動](doc/adr/adr-004.md)
 - [ADR-005：予約・キャンセルの競合制御とTransaction境界](doc/adr/adr-005.md)
-
 - [ADR-006：認証アーキテクチャとユーザー管理方針](doc/adr/adr-006.md)
+- [ADR-007：CloudFront VPC Originsの採用](doc/adr/adr-007.md)
