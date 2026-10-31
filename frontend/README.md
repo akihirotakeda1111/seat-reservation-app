@@ -64,7 +64,7 @@ Cognitoの`ADMINS`グループに所属するユーザーに「予約管理へ�
 
 ## ビルド・テスト
 
-Node.js 24とnpmを用意し、`frontend`で実行する。
+Node.js 26.13.0（ルートの`.node-version`）と同梱npmを用意し、`frontend`で実行する。
 
 ```sh
 npm ci
@@ -78,7 +78,7 @@ npm run test:integration
 
 E2EはAPIをモックし、Vite（5174）とテスト専用OIDCサーバー（18082）を自動起動する。Authorization Code + PKCEによる認証を行い、テストユーザーを選択する。
 
-実API結合テストはJDK 25（JAVA_HOME）と起動済みDockerが必要。専用PostgreSQL、Backend（18081）、Vite（5174）、同OIDCサーバー（18082）を起動し、署名付きJWTをBackendが検証する。E2Eと結合テストは同時実行しない。テスト用Issuerはテスト設定だけで利用し、実Cognitoへの接続・設定は別途手動確認する。
+実API結合テストはTemurin JDK 25.0.5+8（JAVA_HOME）と起動済みDockerが必要。専用PostgreSQL、Backend（18081）、Vite（5174）、同OIDCサーバー（18082）を起動し、署名付きJWTをBackendが検証する。E2Eと結合テストは同時実行しない。テスト用Issuerはテスト設定だけで利用し、実Cognitoへの接続・設定は別途手動確認する。
 
 認証・一般予約・管理者機能の単体／ブラウザ／実API結合テストを用意する。個別ケースはテストマトリクスを参照。実Cognitoの許可URL・ログインセッション・メール配信は別途確認する。
 

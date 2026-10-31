@@ -64,11 +64,13 @@ APIへの通信はCloudFront VPC Origins経由でInternal ALBからECSへ転送�
 | 領域 | 技術 |
 | --- | --- |
 | Frontend | React / TypeScript / Vite |
-| Backend | Java 25 / Spring Boot 4.1.1 / Spring MVC / Spring Data JPA |
-| Database・マイグレーション | PostgreSQL（ローカル・テスト：17、AWS RDS：16.15）/ Flyway |
-| ビルド・ローカル環境 | Maven Wrapper / Node.js 24 / npm / Docker Compose |
+| Backend | Temurin 25.0.5+8 / Spring Boot 4.1.1 / Spring MVC / Spring Data JPA |
+| Database・マイグレーション | PostgreSQL 17.11（ローカル・テスト・AWS RDS共通）/ Flyway |
+| ビルド・ローカル環境 | Maven Wrapper / Node.js 26.13.0 / npm / Docker Compose |
 | Backendテスト | JUnit / Testcontainers |
 | Frontendテスト | Vitest / Testing Library / Playwright |
+
+Javaは`.java-version`、Node.jsは`.node-version`をホスト開発・CIの基準とし、Dockerも同じ更新版を使用する。
 
 依存バージョンの詳細は[backend/pom.xml](backend/pom.xml)と[frontend/package.json](frontend/package.json)を参照。
 
@@ -145,7 +147,7 @@ docker compose -f compose.demo.yml up -d --wait
 [GitHub Actions](.github/workflows/ci.yml)で、main向けPR・mainへのPush・手動実行時に以下を検証する。
 
 - Backend：Java 25でビルド、単体・認証認可・Testcontainers結合テスト、Dockerイメージのビルド検証（Pushなし）。
-- Frontend：Node.js 24で書式チェック、単体テスト、ビルド、ChromeでのE2E・実API結合テスト。
+- Frontend：Node.js 26.13.0で書式チェック、単体テスト、ビルド、ChromeでのE2E・実API結合テスト。
 - Terraform：書式・構文チェック、AWSモックを使用するテスト。Stateへの接続や実リソースの変更は行わない。
 - リリース処理：公開用Frontend設定の検証テストとデプロイスクリプトのテスト。
 

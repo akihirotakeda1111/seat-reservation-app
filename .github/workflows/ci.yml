@@ -44,13 +44,13 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: "25"
+          java-version-file: .java-version
           cache: maven
           cache-dependency-path: backend/pom.xml
       - name: Test and package
         run: sh ./mvnw -B -ntp verify
       - name: Build Docker image
-        run: docker build --tag seat-reservation-app:ci .
+        run: docker build --pull --tag seat-reservation-app:ci .
       - name: Save test reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
@@ -72,7 +72,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          node-version-file: .node-version
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
@@ -80,6 +80,9 @@ jobs:
       - run: npm test
       - name: Test release configuration validation
         run: node --test ../.github/scripts/validate-frontend-env.test.mjs
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
       - name: Test deployment safeguards
         run: python3 -m unittest discover -s ../.github/scripts -p 'test_deploy.py'
       - name: Check types and build
@@ -102,14 +105,14 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          node-version-file: .node-version
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - uses: actions/setup-java@v6
         if: matrix.suite == 'integration'
         with:
           distribution: temurin
-          java-version: "25"
+          java-version-file: .java-version
           cache: maven
           cache-dependency-path: backend/pom.xml
       - name: Prepare Maven wrapper for integration tests

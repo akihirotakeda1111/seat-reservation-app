@@ -2,7 +2,7 @@ name: seat-reservation-demo
 
 services:
   postgres:
-    image: postgres:17
+    image: postgres:17.11-bookworm
     environment:
       POSTGRES_DB: seat_reservation
       POSTGRES_USER: seat_app

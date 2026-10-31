@@ -63,7 +63,7 @@ export default async function setup() {
         'POSTGRES_DB=frontend_test',
         '-p',
         '127.0.0.1::5432',
-        'postgres:17',
+        'postgres:17.11-bookworm',
       ],
       { stdio: 'pipe', windowsHide: true },
     );

@@ -39,7 +39,7 @@ jobs:
           tag="${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           aws ecr get-login-password | docker login --username AWS --password-stdin "$registry"
           trap 'docker logout "$registry"' EXIT
-          docker build --platform linux/amd64 --tag "$REPOSITORY_URL:$tag" backend
+          docker build --pull --platform linux/amd64 --tag "$REPOSITORY_URL:$tag" backend
           docker push "$REPOSITORY_URL:$tag"
           digest="$(aws ecr describe-images --repository-name "$repository" --image-ids "imageTag=$tag" --query 'imageDetails[0].imageDigest' --output text)"
           [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo 'Invalid image digest'; exit 1; }

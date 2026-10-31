@@ -20,7 +20,7 @@ class ReservationIntegrationTestConfig {
     @ServiceConnection
     PostgreSQLContainer postgres() {
         // 専用PostgreSQLを定義し、接続情報は@ServiceConnectionでアプリへ渡す。
-        return new PostgreSQLContainer("postgres:17-alpine");
+        return new PostgreSQLContainer("postgres:17.11-bookworm");
     }
 
     @Bean

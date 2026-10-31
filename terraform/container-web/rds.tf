@@ -6,8 +6,8 @@ resource "aws_db_subnet_group" "app" {
 
 resource "aws_db_parameter_group" "app" {
   name        = local.db_identifier
-  family      = "postgres16"
-  description = "PostgreSQL 16 with TLS required"
+  family      = "postgres17"
+  description = "PostgreSQL 17 with TLS required"
   parameter {
     name  = "rds.force_ssl"
     value = "1"
@@ -17,7 +17,7 @@ resource "aws_db_parameter_group" "app" {
 resource "aws_db_instance" "app" {
   identifier     = local.db_identifier
   engine         = "postgres"
-  engine_version = "16.15"
+  engine_version = "17.11"
   instance_class = "db.t4g.micro"
 
   allocated_storage = 20

@@ -17,7 +17,7 @@ class SeatReservationApiApplicationTests extends JwtAuthenticatedTest {
 
 	@Container
 	@ServiceConnection
-	static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17-alpine");
+	static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17.11-bookworm");
 
 	@Test
 	void contextLoads() {}

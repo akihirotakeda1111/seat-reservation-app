@@ -58,7 +58,7 @@ java/com/example/seat_reservation_api/
 
 共通の環境設定は`ReservationIntegrationTestConfig`、DBの準備・検証は`ReservationIntegrationTestSupport`、HTTP操作・応答検証は`ReservationHttpTestSupport`にまとめる。Transaction / ConcurrencyのケースIDは各メソッドの`@DisplayName`と[テスト定義](../doc/testing/transaction-concurrency-test-matrix.md)で対応付ける。
 
-JDK 25（`JAVA_HOME`設定）と起動済みDockerを用意し、`backend`ディレクトリで実行する。Mavenは同梱のWrapperを使用する。
+Temurin JDK 25.0.5+8（ルートの`.java-version`、`JAVA_HOME`設定）と起動済みDockerを用意し、`backend`ディレクトリで実行する。Mavenは同梱のWrapperを使用する。
 
 結合テスト3クラスを実行する場合（Windows / PowerShell）：
 
@@ -74,7 +74,7 @@ macOS / Linux：
 
 特定のクラスだけ実行する場合は、`-Dtest`にそのクラス名だけを指定する。
 
-Testcontainersが専用のPostgreSQL 17を起動し、Flywayでテーブルと初期データを作成するため、Composeでの事前起動は不要。初回は依存関係とコンテナイメージのダウンロードが必要。
+Testcontainersが専用のPostgreSQL 17.11（`postgres:17.11-bookworm`）を起動し、Flywayでテーブルと初期データを作成するため、Composeでの事前起動は不要。初回は依存関係とコンテナイメージのダウンロードが必要。
 
 Transaction / Concurrencyテストはケース間を直列実行し、ケース内のHTTPや独立DB接続を並列化する。自由な競合は反復し、順序を制御するケースではSQLの待機や先行Transaction保留中の後続完了を確認する。反復回数・期待結果・検証対象外の範囲はテスト定義を参照。
 

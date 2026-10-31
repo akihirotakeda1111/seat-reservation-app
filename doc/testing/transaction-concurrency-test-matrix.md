@@ -54,7 +54,7 @@ void concurrentReservationsByDifferentUsers() {
 
 ### 共通環境・データ
 
-- Java 25、Maven Wrapper、Dockerが利用可能な環境。既存の`ReservationApiIntegrationTest`に合わせ、Testcontainersの`postgres:17-alpine`、`local` / `test`プロファイル、Flywayを使用する。
+- Java 25、Maven Wrapper、Dockerが利用可能な環境。既存の`ReservationApiIntegrationTest`に合わせ、Testcontainersの`postgres:17.11-bookworm`、`local` / `test`プロファイル、Flywayを使用する。
 - テスト用`Clock.fixed(...)`を設定し、アプリケーションの日本時間の当日をDとする。DとD+1、座席1・2（マスタは1〜30）を使用する。
 - A＝テストJWTの`sub=demo-user-1`、B＝`sub=demo-user-2`。POSTは`/api/reservations`、本文は`{"date":"実日付","seatNumber":1}`、`Content-Type: application/json`、`Authorization: Bearer <操作ユーザーのテスト用Access Token>`を指定する。DELETEは`/api/reservations/{id}`。
 - 各ケースの事前データは明示的にcommitする。テストメソッド全体に`@Transactional`を付けず、各操作のTransactionと検証用接続を分離する。

@@ -106,8 +106,8 @@ CIはGitHub-hosted Runnerで実行する。
 | 設定項目 | 内容 |
 |---|---|
 | Runner | Ubuntu 24.04 |
-| ツール | Temurin JDK 25、Node.js 24、Terraform 1.14.7、RunnerのPython 3 |
-| Backend | `sh ./mvnw -B -ntp verify`成功後、`backend`で`docker build --tag seat-reservation-app:ci .`を実行。イメージのPush・起動は行わない |
+| ツール | Temurin JDK 25.0.5+8（`.java-version`）、Node.js 26.13.0（`.node-version`）、Terraform 1.14.7、Python 3.13 |
+| Backend | `sh ./mvnw -B -ntp verify`成功後、`backend`で`docker build --pull --tag seat-reservation-app:ci .`を実行。イメージのPush・起動は行わない |
 | Frontend | `npm ci`、`npm run format:check`、`npm test`、`npm run build`、公開設定検証スクリプトのテスト |
 | デプロイ処理テスト | Frontendジョブで`test_deploy.py`を実行。成果物検証、基本定義の保持、起動・更新、更新反映待ち、失敗判定・記録をモックで検証し、AWSへは接続しない |
 | ブラウザテスト | Chromeをインストールし、`test:e2e`と`test:integration`を別Runnerで実行。各1 worker、`--forbid-only`指定 |
