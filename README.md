@@ -155,7 +155,7 @@ docker compose -f compose.demo.yml up -d --wait
 
 mainのCIでは検証成功後、有効化したBackendのECR PushとFrontendの公開用成果物保存を行う。この処理にはAWS認証（OIDC）やCognitoなどの公開用設定が必要。Artifactsは30日間保存する。
 
-CDは初回・通常更新ともに、両成果物が揃った成功済みmain CIの実行IDを指定して`Deploy release`を手動起動する。リリース用タスク定義登録・ECS更新・S3配置・正常性確認を自動実行し、通常リリースのTerraform実行は不要。インフラ更新・破棄は手動Terraformで行う。初期設定と実行方法は[CI/CD設定](.github/README.md)を参照。
+CDは初回・通常更新ともに、両成果物が揃った成功済みmain CIの実行IDを指定して`Deploy release`を手動起動する。リリース用タスク定義登録・ECS更新・S3配置・正常性確認を自動実行し、通常リリースのTerraform実行は不要。インフラ更新・破棄は手動Terraformで行う。初期設定と実行方法は[CI/CD設定](.github/CICD.md)を参照。
 
 PRのマージをCI成功に限定する場合は、GitHubのRulesetで本ワークフローの各ジョブを必須チェックに設定する。
 
@@ -203,7 +203,7 @@ PRのマージをCI成功に限定する場合は、GitHubのRulesetで本ワー
 | Frontend開発・検証 | [Frontend README](frontend/README.md) |
 | Backend開発・検証 | [Backend README](backend/README.md) |
 | AWSデプロイ・更新・破棄 | [Terraform README](terraform/README.md) |
-| CI/CD設定・実行 | [CI/CD設定](.github/README.md) |
+| CI/CD設定・実行 | [CI/CD設定](.github/CICD.md) |
 | AWS・CI/CD設計 | [AWSアーキテクチャ設計](doc/system-design/aws-architecture.md)、[CI/CD設計](doc/system-design/cicd-design.md) |
 | 障害調査・復旧 | [TROUBLESHOOTING](terraform/TROUBLESHOOTING.md) |
 | 詳細仕様 | [API定義](doc/system-design/api-definition.md)、[データモデル定義](doc/system-design/data-model.md)、[Frontend仕様](doc/system-design/frontend-specification.md) |

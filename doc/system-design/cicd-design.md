@@ -6,7 +6,7 @@ GitHub Actionsで検証・成果物準備を行い、成功したCI実行IDを�
 
 インフラと基本タスク定義は手動Terraformで管理する。通常リリースではTerraformを実行せず、CD内での再ビルドも行わない。
 
-AWS構成と管理境界は[AWSアーキテクチャ設計](aws-architecture.md)、意思決定の経緯は[ADR-007](../adr/adr-007.md)、設定・操作手順は[CI/CD設定](../../.github/README.md)を参照する。障害対応の方針と詳細手順の参照先は第9章に示す。
+AWS構成と管理境界は[AWSアーキテクチャ設計](aws-architecture.md)、意思決定の経緯は[ADR-007](../adr/adr-007.md)、設定・操作手順は[CI/CD設定](../../.github/CICD.md)を参照する。障害対応の方針と詳細手順の参照先は第9章に示す。
 
 ## 2. 配置・ワークフロー構成
 
@@ -77,7 +77,7 @@ Pull RequestでCIを実行し、mainのCI成功後に公開用の成果物を準
 | 各ワークフローの具体的なIAM権限 | Push用Roleとデプロイ用Roleを分離。後者はSSM参照・リリース用familyへのタスク定義登録・対象ECRのイメージ存在確認・対象ECS更新・実行RoleのPassRole・対象S3配置・CloudFront無効化・正常性参照を許可。State権限なし |
 | GitHub Actionsに渡す設定値と保管先 | 有効化フラグはRepository Variables、Role ARN・ECR URL・SSM Parameter名（`DEPLOYMENT_PARAMETER_NAME`）・Frontend公開設定は`dev`のEnvironment Variables |
 
-設定値と登録手順は[CI/CD設定](../../.github/README.md)を参照する。
+設定値と登録手順は[CI/CD設定](../../.github/CICD.md)を参照する。
 
 DB認証情報の管理方式とTerraform State管理方式は[AWSアーキテクチャ設計](aws-architecture.md)を参照する。
 

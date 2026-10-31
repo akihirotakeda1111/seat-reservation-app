@@ -51,7 +51,7 @@ test -e terraform/terraform.tfvars || cp terraform/terraform.tfvars.example terr
 | `terraform/backend.hcl` | State用バケット名。暗号化・ロックの設定は維持 |
 | `terraform/terraform.tfvars` | 公開／Origin用FQDN、発行済み証明書ARN |
 
-CDを使用するため、[CI/CD設定](../.github/README.md)に従い`github_repository`と既存OIDC Providerの有無も設定する。インフラ作成後、GitHubの`dev`環境とRepository Variablesを登録する。
+CDを使用するため、[CI/CD設定](../.github/CICD.md)に従い`github_repository`と既存OIDC Providerの有無も設定する。インフラ作成後、GitHubの`dev`環境とRepository Variablesを登録する。
 
 初回は以下の値にする。その他の調整項目は[設定例](terraform.tfvars.example)を参照。
 
@@ -109,7 +109,7 @@ TerraformはCPU・メモリ・環境変数・Secret参照を含む基本タス�
 
 ### 2.6 CDで配置・起動・動作確認
 
-[CI/CD設定](../.github/README.md)に従い、`github_deployment`出力の2変数をGitHubの`dev`環境へ登録する。`AWS_ENV_ENABLED=true`・`FRONTEND_BUILD_ENABLED=true`でmainのCIを成功させる。両成果物を含むCI実行IDを控える。
+[CI/CD設定](../.github/CICD.md)に従い、`github_deployment`出力の2変数をGitHubの`dev`環境へ登録する。`AWS_ENV_ENABLED=true`・`FRONTEND_BUILD_ENABLED=true`でmainのCIを成功させる。両成果物を含むCI実行IDを控える。
 
 `DEPLOY_ENABLED=true`にし、Actions → **Deploy release**でmainとCI実行IDを指定する。CDが成果物を検証してリリース用タスク定義を登録し、Serviceへその定義とタスク数1を同時反映する。Backend正常性確認後、Frontend配置・CloudFrontキャッシュ削除・公開URL確認まで実行する。初回専用モードや手動のS3配置は不要。
 

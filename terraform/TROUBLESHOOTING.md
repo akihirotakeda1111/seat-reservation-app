@@ -1,6 +1,6 @@
 # AWS・CI/CDの障害調査と復旧
 
-通常の操作は[Terraform README](README.md)・[CI/CD設定](../.github/README.md)を参照。以下のコマンドはLinux / Bashで、リポジトリルートから実行する。Terraform・AWS CLI・jqを用意し、対象AWSアカウントへ認証してから各コマンドの成功を確認して進む。
+通常の操作は[Terraform README](README.md)・[CI/CD設定](../.github/CICD.md)を参照。以下のコマンドはLinux / Bashで、リポジトリルートから実行する。Terraform・AWS CLI・jqを用意し、対象AWSアカウントへ認証してから各コマンドの成功を確認して進む。
 
 ## CI・CDの失敗を確認する
 
