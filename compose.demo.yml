@@ -33,8 +33,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      # 保護されたAPIの401応答でHTTP起動を確認する。
-      test: ["CMD-SHELL", "test \"$$(curl --silent --output /dev/null --write-out '%{http_code}' http://localhost:8080/api/seats?date=2026-10-12)\" = 401"]
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://localhost:8080/actuator/health"]
       interval: 5s
       timeout: 5s
       retries: 24

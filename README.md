@@ -91,7 +91,7 @@ docker compose up --build -d --wait
 docker compose ps
 ```
 
-DB、Backend、Frontendの順にヘルスチェックを確認して起動する。Backendは保護APIの401応答によるHTTP起動確認であり、DBなどの詳細ヘルス判定ではない。初回のDB作成時にはFlywayがテーブルと30席の初期データを登録する。
+DB、Backend、Frontendの順にヘルスチェックを確認して起動する。Backendは`/actuator/health`でDB接続を含む正常性を確認する。初回のDB作成時にはFlywayがテーブルと30席の初期データを登録する。
 
 | 接続先 | URL・ポート |
 | --- | --- |
